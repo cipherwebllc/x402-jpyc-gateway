@@ -1,0 +1,42 @@
+import { createHash } from 'node:crypto';
+
+import { Actor, AnonymousIdentity, HttpAgent, type ActorMethod } from '@icp-sdk/core/agent';
+import { IDL } from '@icp-sdk/core/candid';
+import { Ed25519KeyIdentity } from '@icp-sdk/core/identity';
+
+import type { Adapter } from './types';
+
+type CooActor = {
+  chat: ActorMethod<[string], string>;
+};
+
+const idlFactory: Parameters<typeof Actor.createActor>[0] = () =>
+  IDL.Service({
+    chat: IDL.Func([IDL.Text], [IDL.Text], []),
+  });
+
+function identityForEnvironment(): AnonymousIdentity | Ed25519KeyIdentity {
+  const seed = process.env.IC_IDENTITY_SEED;
+  if (!seed) return new AnonymousIdentity();
+
+  const digest = createHash('sha256').update(seed).digest();
+  return Ed25519KeyIdentity.generate(new Uint8Array(digest));
+}
+
+export const cooIcpAdapter: Adapter = async ({ q }) => {
+  const canisterId = process.env.COO_CANISTER_ID;
+  if (!canisterId) throw new Error('COO_CANISTER_ID is not set');
+
+  const identity = identityForEnvironment();
+  const agent = await HttpAgent.create({
+    host: process.env.IC_HOST || 'https://icp-api.io',
+    identity,
+    shouldFetchRootKey: false,
+    shouldSyncTime: false,
+    logToConsole: false,
+  });
+  const actor = Actor.createActor<CooActor>(idlFactory, { agent, canisterId });
+  const answer = await actor.chat(q);
+
+  return { answer };
+};
