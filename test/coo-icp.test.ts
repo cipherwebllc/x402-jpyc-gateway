@@ -37,6 +37,7 @@ describe('cooIcpAdapter', () => {
   const anonymousIdentity = { kind: 'anonymous' };
   const agent = { kind: 'agent' };
   const chat = vi.fn();
+  const clearConversation = vi.fn();
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -48,8 +49,9 @@ describe('cooIcpAdapter', () => {
       } as unknown as () => unknown,
     );
     mocks.createAgent.mockResolvedValue(agent);
-    mocks.createActor.mockReturnValue({ chat });
+    mocks.createActor.mockReturnValue({ chat, clear_conversation: clearConversation });
     chat.mockResolvedValue({ Ok: 'IC answer' });
+    clearConversation.mockResolvedValue(undefined);
     vi.stubEnv('COO_CANISTER_ID', 'aaaaa-aa');
     vi.stubEnv('IC_HOST', 'https://ic.example');
   });
@@ -75,6 +77,15 @@ describe('cooIcpAdapter', () => {
       canisterId: 'aaaaa-aa',
     });
     expect(chat).toHaveBeenCalledWith('hello');
+  });
+
+  it('clears the gateway conversation before every chat (1 payment = 1 independent Q&A)', async () => {
+    await cooIcpAdapter({ q: 'hello' });
+
+    expect(clearConversation).toHaveBeenCalledTimes(1);
+    expect(clearConversation.mock.invocationCallOrder[0]).toBeLessThan(
+      chat.mock.invocationCallOrder[0],
+    );
   });
 
   it('throws when the canister returns a Candid Err variant', async () => {

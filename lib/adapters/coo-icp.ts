@@ -12,11 +12,13 @@ type ChatResult = { Ok: string } | { Err: string };
 
 type CooActor = {
   chat: ActorMethod<[string], ChatResult>;
+  clear_conversation: ActorMethod<[], undefined>;
 };
 
 const idlFactory: Parameters<typeof Actor.createActor>[0] = () =>
   IDL.Service({
     chat: IDL.Func([IDL.Text], [IDL.Variant({ Ok: IDL.Text, Err: IDL.Text })], []),
+    clear_conversation: IDL.Func([], [], []),
   });
 
 function identityForEnvironment(): AnonymousIdentity | Ed25519KeyIdentity {
@@ -40,6 +42,10 @@ export const cooIcpAdapter: Adapter = async ({ q }) => {
     logToConsole: false,
   });
   const actor = Actor.createActor<CooActor>(idlFactory, { agent, canisterId });
+  // canister は caller (principal) 毎に会話履歴を蓄積し LLM コンテキストに使う。
+  // 1 支払い = 独立した 1 問 1 答にするため、毎回 chat の前に自分の会話だけを消す
+  // (per-caller なので他利用者の会話には影響しない)。
+  await actor.clear_conversation();
   const result = await actor.chat(q);
   // Err は上流失敗として throw → route が settle せず 502 (未課金)
   if (!('Ok' in result)) throw new Error('coo-icp chat returned Err');

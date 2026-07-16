@@ -22,10 +22,12 @@ npm run dev
 | `ADAPTER` | いいえ | `coo-icp`（既定）または `http` |
 | `COO_CANISTER_ID` | `coo-icp` 時 | coo-icp の canister ID |
 | `IC_HOST` | いいえ | IC エンドポイント。既定は `https://icp-api.io` |
-| `IC_IDENTITY_SEED` | いいえ | 設定時は SHA-256 から決定的な Ed25519 identity を生成。未設定なら匿名 identity |
+| `IC_IDENTITY_SEED` | 強く推奨 | 設定時は SHA-256 から決定的な Ed25519 identity を生成。未設定なら匿名 identity になるが、coo-icp は caller 毎に会話履歴を保持し**匿名 principal の履歴は誰でも読める**ため、必ずランダムな秘密値を設定すること |
 | `UPSTREAM_URL` | `http` 時 | JSON を返す上流 API URL |
 
 `http` アダプタは `UPSTREAM_URL` に `q` クエリを付けて GET し、その JSON を返します。coo-icp は `chat(q)` の応答を `{ "answer": "..." }` として返します。
+
+coo-icp canister は caller (principal) 毎に会話履歴を蓄積して LLM のコンテキストに使うため、ゲートウェイは「1 支払い = 独立した 1 問 1 答」を守る目的で毎回 `chat` の前に `clear_conversation` を呼びます (per-caller なので他の利用者の会話には影響しません)。なお同時に複数の支払いリクエストが重なった場合、clear と chat の間に他のリクエストが割り込み、直前の質問が文脈に混ざる可能性が理論上残ります (低トラフィックでは実質問題になりません)。
 
 ## Vercel へのデプロイ
 

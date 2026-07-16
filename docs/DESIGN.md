@@ -97,6 +97,12 @@ GET /api/consult?q=...
   candid:service メタデータ (2026-07-16 mainnet 実機確認) に合わせて
   `chat : (text) -> (variant { Ok : text; Err : text })` (update call)。
   Ok → `{ answer }`、Err → throw (route が 502・未課金)。
+  canister は caller 毎 (`HashMap<Principal, ConversationState>`) に会話履歴を保持し LLM
+  コンテキストに使うため (dwebxr/coo-icp lib.rs + mainnet 実験で確認 2026-07-16)、
+  毎回 chat の前に `clear_conversation : () -> ()` を呼んで 1 問 1 答の独立性を保証する
+  (per-caller 削除なので他利用者に影響なし)。匿名 principal の履歴は誰でも読めるため
+  `IC_IDENTITY_SEED` の設定を強く推奨。並行リクエスト時の clear/chat 交錯による文脈混入は
+  理論上残る (許容・README に明記)。
   - host = `IC_HOST` (default `https://icp-api.io`)、mainnet なので fetchRootKey しない
   - identity: `IC_IDENTITY_SEED` があれば sha256(seed) 32byte から Ed25519 決定的生成、
     無ければ匿名
