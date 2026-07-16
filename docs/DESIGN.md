@@ -93,8 +93,10 @@ GET /api/consult?q=...
   (verify 済み・未課金なので買い手に損は出ない)。
 - `coo-icp`: IC 公式 JS SDK の HttpAgent + Actor。**パッケージは `@icp-sdk/core` を採用**
   (`@dfinity/agent` は 2025-08 以降 deprecated で `@icp-sdk/core` が公式後継。import は
-  `@icp-sdk/core/agent` / `@icp-sdk/core/candid` 等のサブパス)。IDL は
-  `IDL.Service({ chat: IDL.Func([IDL.Text], [IDL.Text], []) })` (update call)。
+  `@icp-sdk/core/agent` / `@icp-sdk/core/candid` 等のサブパス)。IDL は実 canister の
+  candid:service メタデータ (2026-07-16 mainnet 実機確認) に合わせて
+  `chat : (text) -> (variant { Ok : text; Err : text })` (update call)。
+  Ok → `{ answer }`、Err → throw (route が 502・未課金)。
   - host = `IC_HOST` (default `https://icp-api.io`)、mainnet なので fetchRootKey しない
   - identity: `IC_IDENTITY_SEED` があれば sha256(seed) 32byte から Ed25519 決定的生成、
     無ければ匿名

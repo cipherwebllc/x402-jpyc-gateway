@@ -6,13 +6,17 @@ import { Ed25519KeyIdentity } from '@icp-sdk/core/identity';
 
 import type { Adapter } from './types';
 
+// 実 canister の Candid (メタデータ candid:service で確認):
+//   chat : (text) -> (variant { Ok : text; Err : text })
+type ChatResult = { Ok: string } | { Err: string };
+
 type CooActor = {
-  chat: ActorMethod<[string], string>;
+  chat: ActorMethod<[string], ChatResult>;
 };
 
 const idlFactory: Parameters<typeof Actor.createActor>[0] = () =>
   IDL.Service({
-    chat: IDL.Func([IDL.Text], [IDL.Text], []),
+    chat: IDL.Func([IDL.Text], [IDL.Variant({ Ok: IDL.Text, Err: IDL.Text })], []),
   });
 
 function identityForEnvironment(): AnonymousIdentity | Ed25519KeyIdentity {
@@ -36,7 +40,9 @@ export const cooIcpAdapter: Adapter = async ({ q }) => {
     logToConsole: false,
   });
   const actor = Actor.createActor<CooActor>(idlFactory, { agent, canisterId });
-  const answer = await actor.chat(q);
+  const result = await actor.chat(q);
+  // Err は上流失敗として throw → route が settle せず 502 (未課金)
+  if (!('Ok' in result)) throw new Error('coo-icp chat returned Err');
 
-  return { answer };
+  return { answer: result.Ok };
 };

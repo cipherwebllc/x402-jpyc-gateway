@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   generateIdentity: vi.fn(),
   candidFunc: vi.fn(),
   candidService: vi.fn(),
+  candidVariant: vi.fn(),
 }));
 
 vi.mock('@icp-sdk/core/agent', () => ({
@@ -21,6 +22,7 @@ vi.mock('@icp-sdk/core/candid', () => ({
   IDL: {
     Func: mocks.candidFunc,
     Service: mocks.candidService,
+    Variant: mocks.candidVariant,
     Text: 'text',
   },
 }));
@@ -47,7 +49,7 @@ describe('cooIcpAdapter', () => {
     );
     mocks.createAgent.mockResolvedValue(agent);
     mocks.createActor.mockReturnValue({ chat });
-    chat.mockResolvedValue('IC answer');
+    chat.mockResolvedValue({ Ok: 'IC answer' });
     vi.stubEnv('COO_CANISTER_ID', 'aaaaa-aa');
     vi.stubEnv('IC_HOST', 'https://ic.example');
   });
@@ -73,6 +75,12 @@ describe('cooIcpAdapter', () => {
       canisterId: 'aaaaa-aa',
     });
     expect(chat).toHaveBeenCalledWith('hello');
+  });
+
+  it('throws when the canister returns a Candid Err variant', async () => {
+    chat.mockResolvedValue({ Err: 'llm unavailable' });
+
+    await expect(cooIcpAdapter({ q: 'hello' })).rejects.toThrow('coo-icp chat returned Err');
   });
 
   it('derives a deterministic Ed25519 identity from IC_IDENTITY_SEED', async () => {
