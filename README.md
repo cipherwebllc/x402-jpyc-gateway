@@ -1,6 +1,25 @@
 # x402 JPYC Gateway
 
-OpenPay の x402 ファシリテーターを使い、上流 API を JPYC の「1 支払い = 1 リクエスト」API にする Next.js ゲートウェイです。標準アダプタは Internet Computer の coo-icp canister (`chat : (text) -> (text)`) で、任意の JSON API に中継する HTTP アダプタもあります。
+**既存の API を 1 行も変更せずに、JPYC の「1 支払い = 1 リクエスト」API にするゲートウェイ**です。AWS WAF や Cloudflare が示した「インフラ側で x402 化する」アプローチの日本円 (JPYC) 版 — アプリの前段にこのプロキシを置くだけで、AI エージェントが [OpenPay AI ストア](https://open-pay.jp/discovery)経由であなたの API に都度課金できるようになります。
+
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fcipherwebllc%2Fx402-jpyc-gateway&env=MY_RESOURCE_URL,ADAPTER,UPSTREAM_URL,IC_IDENTITY_SEED&envDescription=MY_RESOURCE_URL%20is%20required.%20Set%20ADAPTER%3Dhttp%20%2B%20UPSTREAM_URL%20to%20monetize%20any%20JSON%20API.&project-name=x402-jpyc-gateway&repository-name=x402-jpyc-gateway)
+
+アダプタ式で、同梱は 2 種:
+
+- `http` — **任意の JSON API** に中継 (コード変更ゼロの課金化)
+- `coo-icp` (既定) — Internet Computer の coo-icp canister (`chat : (text) -> (text)`) に中継。[実売実績あり](https://open-pay.jp/discovery)
+
+決済の実体 (署名検証・オンチェーン決済・手数料分割) は OpenPay のファシリテーターが行い、このゲートウェイは鍵もお金も持ちません。
+
+## 5 分クイックスタート — 既存 API を課金化する (`http` アダプタ)
+
+1. 上の **Deploy with Vercel** を押す (またはこのリポを fork して Import)
+2. 環境変数を 3 つ設定: `ADAPTER=http`・`UPSTREAM_URL=<あなたの JSON API>`・`MY_RESOURCE_URL=<デプロイ先の /api/consult URL>`
+3. [open-pay.jp/discovery](https://open-pay.jp/discovery) で `MY_RESOURCE_URL` と価格 (JPYC 整数) を登録
+
+以上で、AI エージェント (Claude + [openpay-x402-mcp](https://www.npmjs.com/package/openpay-x402-mcp)、または [openpay-x402-sdk](https://www.npmjs.com/package/openpay-x402-sdk)) から JPYC で購入可能になります。売上は登録したウォレットに満額直接着金します (手数料は買い手上乗せ)。
+
+---
 
 価格、手数料、受取先はこのリポジトリでは設定しません。OpenPay のカタログにある `accepts` が唯一の権威です。
 
