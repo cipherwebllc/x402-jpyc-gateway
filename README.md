@@ -38,6 +38,7 @@ npm run dev
 | 変数 | 必須 | 内容 |
 | --- | --- | --- |
 | `MY_RESOURCE_URL` | はい | OpenPay に登録するクエリなしの完全な API URL。例: `https://example.vercel.app/api/consult` |
+| `MY_RESOURCE_ID` | いいえ | OpenPay 出品一覧の dual-rail スニペットに表示される ID。空なら JPYC のみ |
 | `ADAPTER` | いいえ | `coo-icp`（既定）または `http` |
 | `COO_CANISTER_ID` | `coo-icp` 時 | coo-icp の canister ID |
 | `IC_HOST` | いいえ | IC エンドポイント。既定は `https://icp-api.io` |
@@ -81,6 +82,25 @@ content-type: application/json
 ```
 
 OpenPay は毎時自動で再検証します。確定した違反が 3 回連続すると掲載は一時非表示になり、問題を修復すれば自動的に復帰します。
+
+## USDC (Base) 併売と x402 Bazaar 掲載
+
+OpenPay 側で対象出品の USDC 面を有効化してから、出品一覧の dual-rail スニペットに表示される ID を Vercel の `MY_RESOURCE_ID` に設定し、再デプロイします。未設定または空の場合は従来どおり JPYC のみを提示します。
+
+デプロイ後、次の確認で 402 本文の `accepts` が JPYC、USDC の順に 2 件あり、`PAYMENT-REQUIRED` ヘッダも返ることを確認します。
+
+```sh
+curl -i "$MY_RESOURCE_URL"
+```
+
+```http
+HTTP/2 402
+payment-required: ...
+
+{"x402Version":1,"accepts":[{"network":"eip155:137","...":"..."},{"network":"base","...":"..."}],"error":"payment_required"}
+```
+
+この表示確認だけでは x402 Bazaar / agentic.market への掲載は確定しません。**最初の実際の USDC 購入 1 件が settle された時点**で、CDP を通じた掲載が開始されます。USDC 売上は出品者アドレスへ直接着金し、OpenPay の USDC 側手数料は 0% です。USDC requirements 面が一時的に 404、エラー、または応答不能になった場合、ゲートウェイは自動的に JPYC のみへ縮退し、JPYC での販売を継続します。
 
 ## 買い手テスト
 

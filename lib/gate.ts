@@ -24,6 +24,13 @@ export type SettleResult = {
   [key: string]: unknown;
 };
 
+export type UsdcFace = {
+  resourceId: string;
+  v1Accepts: PaymentRequirements;
+  paymentRequiredHeader?: string;
+  [key: string]: unknown;
+};
+
 type CatalogItem = {
   resource?: string;
   accepts?: PaymentRequirements[];
@@ -31,10 +38,52 @@ type CatalogItem = {
 
 let acceptsCache: PaymentRequirements[] | null = null;
 let acceptsCachedAt = 0;
+let usdcFaceCache: UsdcFace | null = null;
+let usdcFaceCachedAt = 0;
 
 export function resetAcceptsCache(): void {
   acceptsCache = null;
   acceptsCachedAt = 0;
+}
+
+export function resetUsdcFaceCache(): void {
+  usdcFaceCache = null;
+  usdcFaceCachedAt = 0;
+}
+
+export async function usdcFace(): Promise<UsdcFace | null> {
+  const resourceId = process.env.MY_RESOURCE_ID;
+  if (!resourceId) return null;
+  if (
+    usdcFaceCache &&
+    usdcFaceCache.resourceId === resourceId &&
+    Date.now() - usdcFaceCachedAt < 5 * 60_000
+  ) {
+    return usdcFaceCache;
+  }
+
+  try {
+    const res = await fetch(
+      OPENPAY + '/api/x402/relay/requirements?resourceId=' + encodeURIComponent(resourceId),
+    );
+    if (!res.ok) return null;
+    const value: unknown = await res.json();
+    if (
+      typeof value !== 'object' ||
+      value === null ||
+      typeof (value as Partial<UsdcFace>).resourceId !== 'string' ||
+      typeof (value as Partial<UsdcFace>).v1Accepts !== 'object' ||
+      (value as Partial<UsdcFace>).v1Accepts === null ||
+      Array.isArray((value as Partial<UsdcFace>).v1Accepts)
+    ) {
+      return null;
+    }
+    usdcFaceCache = value as UsdcFace;
+    usdcFaceCachedAt = Date.now();
+    return usdcFaceCache;
+  } catch {
+    return null;
+  }
 }
 
 async function myAccepts(): Promise<PaymentRequirements[]> {
@@ -76,13 +125,21 @@ export async function acceptsFor(requestUrl: string): Promise<PaymentRequirement
   return accepts.map((a) => ({ ...a, resource }));
 }
 
-export function json402(accepts: PaymentRequirements[], error: string): Response {
+export function json402(
+  accepts: PaymentRequirements[],
+  error: string,
+  paymentRequiredHeader?: string,
+): Response {
+  const headers: Record<string, string> = {
+    'content-type': 'application/json',
+    'cache-control': 'no-store',
+  };
+  if (paymentRequiredHeader !== undefined) {
+    headers['PAYMENT-REQUIRED'] = paymentRequiredHeader;
+  }
   return new Response(JSON.stringify({ x402Version: 1, accepts, error }), {
     status: 402,
-    headers: {
-      'content-type': 'application/json',
-      'cache-control': 'no-store',
-    },
+    headers,
   });
 }
 
@@ -104,6 +161,18 @@ function callFacilitator(
 ): Promise<Record<string, unknown>> {
   const body = JSON.stringify({ x402Version: 1, paymentPayload, paymentRequirements });
   return fetch(OPENPAY + '/api/facilitator/' + path, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body,
+  }).then((r) => r.json());
+}
+
+export function relayPayment(
+  path: 'verify' | 'settle',
+  headers: { paymentHeader?: string; paymentSignatureHeader?: string },
+): Promise<Record<string, unknown>> {
+  const body = JSON.stringify({ resourceId: process.env.MY_RESOURCE_ID, ...headers });
+  return fetch(OPENPAY + '/api/x402/relay/' + path, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body,

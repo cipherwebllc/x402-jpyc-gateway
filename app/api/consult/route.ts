@@ -4,9 +4,13 @@ import {
   decodePaymentHeader,
   encodePaymentResponse,
   json402,
+  relayPayment,
   settlePayment,
+  usdcFace,
   verifyPayment,
   type PaymentRequirements,
+  type SettleResult,
+  type VerifyResult,
 } from '@/lib/gate';
 
 export const runtime = 'nodejs';
@@ -22,8 +26,12 @@ function jsonError(status: number, error: string): Response {
   });
 }
 
-function paymentError(accepts: PaymentRequirements[], error: string): Response {
-  return json402(accepts, error);
+function paymentError(
+  accepts: PaymentRequirements[],
+  error: string,
+  paymentRequiredHeader?: string,
+): Response {
+  return json402(accepts, error, paymentRequiredHeader);
 }
 
 export async function GET(request: Request): Promise<Response> {
@@ -34,9 +42,12 @@ export async function GET(request: Request): Promise<Response> {
     return jsonError(500, 'accepts_unavailable');
   }
 
+  const usdc = await usdcFace();
+  const allAccepts = usdc ? [...accepts, usdc.v1Accepts] : accepts;
   const paymentHeader = request.headers.get('X-PAYMENT');
-  if (!paymentHeader) {
-    return paymentError(accepts, 'payment_required');
+  const paymentSignatureHeader = request.headers.get('PAYMENT-SIGNATURE');
+  if (!paymentHeader && paymentSignatureHeader === null) {
+    return paymentError(allAccepts, 'payment_required', usdc?.paymentRequiredHeader);
   }
 
   const q = new URL(request.url).searchParams.get('q');
@@ -44,9 +55,72 @@ export async function GET(request: Request): Promise<Response> {
     return jsonError(400, 'q_required');
   }
 
-  const paymentPayload = decodePaymentHeader(paymentHeader);
-  if (paymentPayload === undefined) {
-    return paymentError(accepts, 'invalid_payment_payload');
+  let paymentPayload: unknown;
+  let isUsdcRail = usdc !== null && paymentSignatureHeader !== null;
+  if (!isUsdcRail) {
+    paymentPayload = decodePaymentHeader(paymentHeader ?? '');
+    if (paymentPayload === undefined) {
+      return paymentError(allAccepts, 'invalid_payment_payload', usdc?.paymentRequiredHeader);
+    }
+    isUsdcRail =
+      usdc !== null &&
+      typeof paymentPayload === 'object' &&
+      paymentPayload !== null &&
+      (paymentPayload as { network?: unknown }).network === usdc.v1Accepts.network;
+  }
+
+  if (isUsdcRail) {
+    const relayHeaders =
+      paymentSignatureHeader !== null
+        ? { paymentSignatureHeader }
+        : { paymentHeader: paymentHeader! };
+
+    let verification: VerifyResult;
+    try {
+      verification = (await relayPayment('verify', relayHeaders)) as VerifyResult;
+    } catch {
+      return jsonError(500, 'payment_verification_failed');
+    }
+    if (verification?.isValid !== true) {
+      return paymentError(
+        allAccepts,
+        verification?.invalidReason ?? 'payment_invalid',
+        usdc?.paymentRequiredHeader,
+      );
+    }
+
+    let serializedBody: string;
+    try {
+      const result = await selectedAdapter()({ q });
+      const serialized = JSON.stringify(result);
+      if (serialized === undefined) throw new Error('adapter result is not JSON serializable');
+      serializedBody = serialized;
+    } catch {
+      return jsonError(502, 'upstream_error');
+    }
+
+    let settlement: SettleResult;
+    try {
+      settlement = (await relayPayment('settle', relayHeaders)) as SettleResult;
+    } catch {
+      return jsonError(500, 'payment_settlement_failed');
+    }
+    if (settlement?.success !== true) {
+      return paymentError(
+        allAccepts,
+        settlement?.errorReason ?? 'settlement_failed',
+        usdc?.paymentRequiredHeader,
+      );
+    }
+
+    return new Response(serializedBody, {
+      status: 200,
+      headers: {
+        'content-type': 'application/json',
+        'cache-control': 'no-store',
+        'X-PAYMENT-RESPONSE': encodePaymentResponse(settlement),
+      },
+    });
   }
 
   let verification;
@@ -56,7 +130,11 @@ export async function GET(request: Request): Promise<Response> {
     return jsonError(500, 'payment_verification_failed');
   }
   if (verification.isValid !== true) {
-    return paymentError(accepts, verification.invalidReason ?? 'invalid_payment');
+    return paymentError(
+      allAccepts,
+      verification.invalidReason ?? 'invalid_payment',
+      usdc?.paymentRequiredHeader,
+    );
   }
 
   let serializedBody: string;
@@ -76,7 +154,11 @@ export async function GET(request: Request): Promise<Response> {
     return jsonError(500, 'payment_settlement_failed');
   }
   if (settlement.success !== true) {
-    return paymentError(accepts, settlement.errorReason ?? 'settlement_failed');
+    return paymentError(
+      allAccepts,
+      settlement.errorReason ?? 'settlement_failed',
+      usdc?.paymentRequiredHeader,
+    );
   }
 
   return new Response(serializedBody, {

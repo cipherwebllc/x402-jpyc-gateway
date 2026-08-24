@@ -228,7 +228,87 @@ http アダプタの timeout (`AbortSignal.timeout`) と `cache: 'no-store'` / d
   (公式ゲートと同じ)。再試行は EIP-3009 により安全。
 - **単一飛行 (single-flight) キャッシュ更新** — サーバーレス・低トラフィックで利益が薄い。
 
-## 13. 既存スキャフォールド
+## 13. dual-rail (JPYC + USDC/Base) 拡張 — 2026-08-24 設計デルタ
+
+出典: ユーザー仕様 + cipherwebllc/openpay 実ソース裏取り (lib/x402/dualRailRelay.ts /
+vanillaGate.ts / packages/x402-sdk/src/dualGate.mjs = 未公開 0.6.0 の参照実装)。
+ゴール: 402 に JPYC+USDC 並記 + `PAYMENT-REQUIRED` ヘッダ、USDC は OpenPay リレー経由で
+verify→upstream→settle の正順維持、USDC 面障害時は JPYC のみで継続、**JPYC 経路は不変更**。
+
+### リレー契約 (ソース確認済み・本番 https://open-pay.jp)
+
+- `GET /api/x402/relay/requirements?resourceId=<MY_RESOURCE_ID>` → 200:
+  `{ resourceId, v1Accepts, v2Accept, paymentRequiredHeader }`。
+  v1Accepts: `{ scheme:'exact', network:'base', maxAmountRequired:<atomic 6 桁>, resource:<登録URL>,
+  description, mimeType, payTo:<出品者>, maxTimeoutSeconds:300, asset:<USDC>, extra }`。
+  非 200 (404 resource_not_found / 404 not_found / 503 relay_unconfigured / 429) は
+  **すべて「USDC 面なし」= null** (throw しない・null はキャッシュしない)。
+- `POST /api/x402/relay/{verify|settle}` body:
+  `{ resourceId, paymentHeader: <X-PAYMENT 生 base64> }` または
+  `{ resourceId, paymentSignatureHeader: <PAYMENT-SIGNATURE 生値> }`。
+  200 = facilitator 判定素通し (verify: `{isValid, invalidReason?, payer?}` /
+  settle: `{success, transaction?, network?, payer?, errorReason?}`)。
+  400 invalid_payment_payload・503 facilitator_unavailable (判定なし=課金なし)。
+  **`isValid===true` / `success===true` 以外は解錠しない (fail-closed)**。
+
+### gate.ts (追加のみ・既存関数 acceptsFor/verifyPayment/settlePayment/callFacilitator は不変更)
+
+- `UsdcFace` 型: `{ resourceId: string; v1Accepts: PaymentRequirements;
+  paymentRequiredHeader?: string; [k: string]: unknown }` (open record)。
+- `usdcFace(): Promise<UsdcFace | null>` — `MY_RESOURCE_ID` 未設定なら即 null (段階ロールアウト)。
+  requirements を 5 分キャッシュ。非 200 / JSON 不正 / v1Accepts 欠落 / fetch 例外 → null
+  (キャッシュせず、復旧したら次リクエストで拾う)。
+- `json402(accepts, error, paymentRequiredHeader?)` — 第 3 引数があれば `PAYMENT-REQUIRED`
+  ヘッダ付与。既存呼び出しは無変更で動く。
+- `relayPayment(path: 'verify'|'settle', headers: {paymentHeader?; paymentSignatureHeader?})`
+  — 上記 POST、`r.json()` を返す (fetch/JSON 例外は投げっぱなし = route が 500 に変換)。
+- `resetUsdcFaceCache()` (テスト用)。
+
+### route.ts の処理順 (JPYC 経路のコードパスは既存のまま)
+
+1. `accepts = acceptsFor(request.url)` — 失敗は従来どおり 500 (USDC 面があっても 500。
+   参照実装は USDC-only 継続だが、bootstrap 500 の意味論維持を優先 — ユーザー仕様どおり)
+2. `usdc = await usdcFace()` (null 許容)
+3. `allAccepts = usdc ? [...accepts, usdc.v1Accepts] : accepts` — **accepts[0] は常に JPYC**
+4. 以後の 402 はすべて `json402(allAccepts, error, usdc?.paymentRequiredHeader)`
+5. 支払いヘッダ (X-PAYMENT / PAYMENT-SIGNATURE) が両方無い → 402 (掲載プローブ互換)
+6. q なし/空 → 400 (支払い処理前・未課金)
+7. レール判定 (参照実装 dualGate.mjs と同一):
+   - `PAYMENT-SIGNATURE` あり → USDC v2 レール (生値を relay へ)
+   - `X-PAYMENT` の decode 失敗 → 402 invalid_payment_payload (従来どおり・allAccepts で)
+   - decode 成功で `payload.network === usdc.v1Accepts.network` ('base') → USDC v1 レール
+     (**生の base64 文字列**を relay へ)
+   - それ以外 → 既存 JPYC 処理そのまま。`usdc === null` なら常に JPYC
+8. USDC レール: relay verify (`isValid!==true` → 402 invalidReason) → アダプタ実行+
+   直列化確定 (失敗 502・settle しない) → relay settle (`success!==true` → 402 errorReason)
+   → 200 + 確定済み body + `X-PAYMENT-RESPONSE: base64(JSON(settlement))`。
+   relay fetch 例外は既存と同じ 500 (payment_verification_failed / payment_settlement_failed)
+9. USDC accepts の金銭フィールド (payTo/amount/asset/resource) は**手で組まず返り値をそのまま**
+   (参照実装も v1Accepts を無加工で並記。買い手スモークは resource 照合をしない)
+
+### env / README
+
+- `.env.example` に `MY_RESOURCE_ID=` (OpenPay 出品一覧の dual-rail スニペットに表示される ID。
+  空なら JPYC のみ)。
+- README「USDC (Base) 併売と x402 Bazaar 掲載」節: OpenPay 側 USDC 面有効化が前提 /
+  `MY_RESOURCE_ID` 設定 / **最初の USDC 実購入 1 件が settle された時点で Bazaar 掲載確定** /
+  USDC 売上は出品者アドレス直接着金 (OpenPay の USDC 側手数料 0%)。
+
+### テスト追加 (fetch モック)
+
+未払い 402 = [JPYC, USDC] 順 + PAYMENT-REQUIRED / MY_RESOURCE_ID 未設定 = 従来 1 件・リレー
+未呼出 / requirements 404・例外 = JPYC のみに degrade / PAYMENT-SIGNATURE → relay verify→
+adapter→relay settle 順で 200 + X-PAYMENT-RESPONSE・JPYC facilitator 未呼出 / X-PAYMENT
+network='base' → USDC・'eip155:137' → JPYC (既存テスト無変更で通ること) / relay verify NG →
+402+invalidReason・adapter 未実行 / adapter 失敗 → 502・settle 未呼出 / relay settle NG →
+402+errorReason / requirements キャッシュ 5 分 (null は非キャッシュ)。
+
+### やってはいけない
+
+JPYC 経路 (accepts[0]・callFacilitator・verify→adapter→settle 順) の変更 / 判定 body 以外を
+根拠に解錠 / USDC 面の失敗で JPYC を止める / 金銭フィールドの手組み。
+
+## 14. 既存スキャフォールド
 
 設計者 (Fable) が先行作成済み — 実装時はこれを土台に完成・修正してよい:
 - package.json / tsconfig.json (スクリプト・paths 設定済み、依存は未インストール)
