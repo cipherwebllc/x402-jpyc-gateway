@@ -129,6 +129,7 @@ export function json402(
   accepts: PaymentRequirements[],
   error: string,
   paymentRequiredHeader?: string,
+  license?: Record<string, unknown>,
 ): Response {
   const headers: Record<string, string> = {
     'content-type': 'application/json',
@@ -137,7 +138,7 @@ export function json402(
   if (paymentRequiredHeader !== undefined) {
     headers['PAYMENT-REQUIRED'] = paymentRequiredHeader;
   }
-  return new Response(JSON.stringify({ x402Version: 1, accepts, error }), {
+  return new Response(JSON.stringify({ x402Version: 1, accepts, error, ...(license ? { license } : {}) }), {
     status: 402,
     headers,
   });

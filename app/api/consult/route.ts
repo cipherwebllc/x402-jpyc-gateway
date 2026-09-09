@@ -1,3 +1,5 @@
+import { LicenseError } from 'openpay-x402-sdk';
+
 import { selectedAdapter } from '@/lib/adapters';
 import {
   acceptsFor,
@@ -12,6 +14,12 @@ import {
   type SettleResult,
   type VerifyResult,
 } from '@/lib/gate';
+import {
+  ensureLicense,
+  payerHasLicense,
+  type LicenseRuntime,
+} from '@/lib/license';
+import { licenseFailure, licenseMetadata, licenseRequired } from '@/lib/license-http';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -29,12 +37,74 @@ function jsonError(status: number, error: string): Response {
 function paymentError(
   accepts: PaymentRequirements[],
   error: string,
+  license: LicenseRuntime,
   paymentRequiredHeader?: string,
 ): Response {
-  return json402(accepts, error, paymentRequiredHeader);
+  return json402(accepts, error, paymentRequiredHeader, licenseMetadata(license));
+}
+
+function cookieValue(cookieHeader: string | null, name: string): string | undefined {
+  if (!cookieHeader) return undefined;
+  for (const part of cookieHeader.split(';')) {
+    const separator = part.indexOf('=');
+    if (separator < 0 || part.slice(0, separator).trim() !== name) continue;
+    const value = part.slice(separator + 1).trim();
+    try {
+      return decodeURIComponent(value);
+    } catch {
+      return value;
+    }
+  }
+  return undefined;
+}
+
+function sessionToken(request: Request): string | undefined {
+  const authorization = request.headers.get('authorization');
+  const bearer = authorization?.match(/^Bearer\s+(.+)$/i)?.[1]?.trim();
+  return bearer || cookieValue(request.headers.get('cookie'), 'license_session');
+}
+
+async function payerLicenseError(
+  verification: VerifyResult,
+  license: LicenseRuntime,
+): Promise<Response | null> {
+  if (typeof verification.payer !== 'string') {
+    return jsonError(503, 'license_check_unavailable');
+  }
+  try {
+    if (!(await payerHasLicense(license, verification.payer))) return licenseRequired(license);
+    return null;
+  } catch (error) {
+    return licenseFailure(error, license);
+  }
 }
 
 export async function GET(request: Request): Promise<Response> {
+  let license: LicenseRuntime;
+  try {
+    license = await ensureLicense();
+  } catch {
+    return jsonError(500, 'license_unavailable');
+  }
+
+  const paymentHeader = request.headers.get('X-PAYMENT');
+  const paymentSignatureHeader = request.headers.get('PAYMENT-SIGNATURE');
+  const hasPayment = Boolean(paymentHeader) || paymentSignatureHeader !== null;
+  const token = sessionToken(request);
+  let licensed = false;
+  if (token) {
+    try {
+      license.gate.check(token);
+      licensed = true;
+    } catch (error) {
+      const invalidSession =
+        error instanceof LicenseError &&
+        (error.code === 'invalid_session' || error.code === 'session_expired');
+      if (!invalidSession) return licenseFailure(error, license);
+      if (!hasPayment) return licenseRequired(license);
+    }
+  }
+
   let accepts: PaymentRequirements[];
   try {
     accepts = await acceptsFor(request.url);
@@ -44,10 +114,13 @@ export async function GET(request: Request): Promise<Response> {
 
   const usdc = await usdcFace();
   const allAccepts = usdc ? [...accepts, usdc.v1Accepts] : accepts;
-  const paymentHeader = request.headers.get('X-PAYMENT');
-  const paymentSignatureHeader = request.headers.get('PAYMENT-SIGNATURE');
   if (!paymentHeader && paymentSignatureHeader === null) {
-    return paymentError(allAccepts, 'payment_required', usdc?.paymentRequiredHeader);
+    return paymentError(
+      allAccepts,
+      'payment_required',
+      license,
+      usdc?.paymentRequiredHeader,
+    );
   }
 
   const q = new URL(request.url).searchParams.get('q');
@@ -60,7 +133,12 @@ export async function GET(request: Request): Promise<Response> {
   if (!isUsdcRail) {
     paymentPayload = decodePaymentHeader(paymentHeader ?? '');
     if (paymentPayload === undefined) {
-      return paymentError(allAccepts, 'invalid_payment_payload', usdc?.paymentRequiredHeader);
+      return paymentError(
+        allAccepts,
+        'invalid_payment_payload',
+        license,
+        usdc?.paymentRequiredHeader,
+      );
     }
     isUsdcRail =
       usdc !== null &&
@@ -85,8 +163,14 @@ export async function GET(request: Request): Promise<Response> {
       return paymentError(
         allAccepts,
         verification?.invalidReason ?? 'payment_invalid',
+        license,
         usdc?.paymentRequiredHeader,
       );
+    }
+
+    if (!licensed) {
+      const error = await payerLicenseError(verification, license);
+      if (error) return error;
     }
 
     let serializedBody: string;
@@ -109,6 +193,7 @@ export async function GET(request: Request): Promise<Response> {
       return paymentError(
         allAccepts,
         settlement?.errorReason ?? 'settlement_failed',
+        license,
         usdc?.paymentRequiredHeader,
       );
     }
@@ -133,8 +218,14 @@ export async function GET(request: Request): Promise<Response> {
     return paymentError(
       allAccepts,
       verification.invalidReason ?? 'invalid_payment',
+      license,
       usdc?.paymentRequiredHeader,
     );
+  }
+
+  if (!licensed) {
+    const error = await payerLicenseError(verification, license);
+    if (error) return error;
   }
 
   let serializedBody: string;
@@ -157,6 +248,7 @@ export async function GET(request: Request): Promise<Response> {
     return paymentError(
       allAccepts,
       settlement.errorReason ?? 'settlement_failed',
+      license,
       usdc?.paymentRequiredHeader,
     );
   }
