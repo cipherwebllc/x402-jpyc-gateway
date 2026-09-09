@@ -1,12 +1,34 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  createLicenseGate,
+  hasLicense,
+  LicenseError,
+  LicenseRpcError,
+} from 'openpay-x402-sdk';
 
 import type { Adapter } from '@/lib/adapters/types';
 import { selectedAdapter } from '@/lib/adapters';
 import { resetAcceptsCache, resetUsdcFaceCache } from '@/lib/gate';
+import { resetLicenseForTests } from '@/lib/license';
+
+const licenseGateMock = vi.hoisted(() => ({
+  challenge: vi.fn(),
+  verify: vi.fn(),
+  check: vi.fn(),
+}));
 
 vi.mock('@/lib/adapters', () => ({
   selectedAdapter: vi.fn(),
 }));
+
+vi.mock('openpay-x402-sdk', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('openpay-x402-sdk')>();
+  return {
+    ...actual,
+    hasLicense: vi.fn(),
+    createLicenseGate: vi.fn(() => licenseGateMock),
+  };
+});
 
 import { GET } from '@/app/api/consult/route';
 
@@ -25,6 +47,7 @@ const catalogAccept = {
 };
 const paymentPayload = { authorization: 'payment' };
 const paymentHeader = Buffer.from(JSON.stringify(paymentPayload)).toString('base64');
+const payer = '0x1111111111111111111111111111111111111111';
 const resourceId = 'resource-id';
 const paymentRequiredHeader = 'encoded-payment-requirements';
 const usdcAccept = {
@@ -90,7 +113,7 @@ function fetchFor(state: FacilitatorState = {}, events?: string[]): ReturnType<t
     if (target === `${OPENPAY}/api/x402/relay/verify`) {
       events?.push('relay verify');
       if (state.relayVerifyThrows) throw new Error('relay verify unavailable');
-      return response(state.relayVerify ?? { isValid: true });
+      return response(state.relayVerify ?? { isValid: true, payer });
     }
     if (target === `${OPENPAY}/api/x402/relay/settle`) {
       events?.push('relay settle');
@@ -100,7 +123,7 @@ function fetchFor(state: FacilitatorState = {}, events?: string[]): ReturnType<t
       );
     }
     if (target === `${OPENPAY}/api/facilitator/verify`) {
-      return response(state.verify ?? { isValid: true });
+      return response(state.verify ?? { isValid: true, payer });
     }
     if (target === `${OPENPAY}/api/facilitator/settle`) {
       return response(state.settle ?? { success: true, transaction: '0xsettled' });
@@ -135,8 +158,21 @@ describe('GET /api/consult', () => {
   beforeEach(() => {
     resetAcceptsCache();
     resetUsdcFaceCache();
+    resetLicenseForTests();
     vi.stubEnv('MY_RESOURCE_URL', resource);
     vi.stubEnv('MY_RESOURCE_ID', undefined);
+    vi.stubEnv('LICENSE_CHAIN_ID', '137');
+    vi.stubEnv('LICENSE_CONTRACT', '0x2222222222222222222222222222222222222222');
+    vi.stubEnv('LICENSE_TOKEN_ID', '0x01');
+    vi.stubEnv('LICENSE_PRODUCT_ID', 'license-product');
+    vi.stubEnv('LICENSE_PRODUCT_URL', 'https://open-pay.jp/products/license-product');
+    vi.stubEnv('LICENSE_SESSION_SECRET', 'test-license-session-secret-32-bytes-minimum');
+    vi.stubEnv('POLYGON_RPC_URL', 'https://polygon-rpc.example');
+    vi.mocked(hasLicense).mockResolvedValue({ holder: true, balance: 1n, blockNumber: 1n });
+    vi.mocked(createLicenseGate).mockReturnValue(licenseGateMock);
+    licenseGateMock.check.mockImplementation(() => {
+      throw new LicenseError('invalid_session', 'invalid test session');
+    });
     fetchMock = fetchFor();
     vi.stubGlobal('fetch', fetchMock);
     adapter = vi.fn<Adapter>();
@@ -147,6 +183,7 @@ describe('GET /api/consult', () => {
   afterEach(() => {
     resetAcceptsCache();
     resetUsdcFaceCache();
+    resetLicenseForTests();
     vi.unstubAllEnvs();
     vi.unstubAllGlobals();
     vi.clearAllMocks();
@@ -533,5 +570,186 @@ describe('GET /api/consult', () => {
     await GET(new Request(url('?q=again')));
 
     expect(relayCallsTo(fetchMock, 'requirements')).toHaveLength(2);
+  });
+
+  it.each(['JPYC', 'USDC'] as const)(
+    'admits a license holder and reaches settlement on the %s rail',
+    async (rail) => {
+      let paidRequest: Request;
+      if (rail === 'USDC') {
+        vi.stubEnv('MY_RESOURCE_ID', resourceId);
+        paidRequest = new Request(url(), {
+          headers: { 'PAYMENT-SIGNATURE': 'raw-signature' },
+        });
+      } else {
+        paidRequest = request();
+      }
+
+      const res = await GET(paidRequest);
+
+      expect(res.status).toBe(200);
+      expect(vi.mocked(hasLicense)).toHaveBeenCalledWith(
+        expect.objectContaining({ address: payer }),
+      );
+      if (rail === 'USDC') {
+        expect(relayCallsTo(fetchMock, 'settle')).toHaveLength(1);
+      } else {
+        expect(callsTo(fetchMock, 'settle')).toHaveLength(1);
+      }
+    },
+  );
+
+  it.each(['JPYC', 'USDC'] as const)(
+    'rejects a non-holder before adapter and settlement on the %s rail',
+    async (rail) => {
+      vi.mocked(hasLicense).mockResolvedValue({ holder: false, balance: 0n, blockNumber: 1n });
+      let paidRequest: Request;
+      if (rail === 'USDC') {
+        vi.stubEnv('MY_RESOURCE_ID', resourceId);
+        paidRequest = new Request(url(), {
+          headers: { 'PAYMENT-SIGNATURE': 'raw-signature' },
+        });
+      } else {
+        paidRequest = request();
+      }
+
+      const res = await GET(paidRequest);
+
+      expect(res.status).toBe(403);
+      expectNoStore(res);
+      expect(await res.json()).toEqual({
+        error: 'license_required',
+        product: 'https://open-pay.jp/products/license-product',
+        contract: '0x2222222222222222222222222222222222222222',
+        tokenId: '0x01',
+      });
+      expect(adapter).not.toHaveBeenCalled();
+      expect(callsTo(fetchMock, 'settle')).toHaveLength(0);
+      expect(relayCallsTo(fetchMock, 'settle')).toHaveLength(0);
+    },
+  );
+
+  it.each(['JPYC', 'USDC'] as const)(
+    'returns 503 without caching an RPC failure on the %s rail',
+    async (rail) => {
+      vi.mocked(hasLicense).mockRejectedValue(new LicenseRpcError('test RPC unavailable'));
+      const paidRequest = () => {
+        if (rail === 'USDC') {
+          vi.stubEnv('MY_RESOURCE_ID', resourceId);
+          return new Request(url(), { headers: { 'PAYMENT-SIGNATURE': 'raw-signature' } });
+        }
+        return request();
+      };
+
+      const first = await GET(paidRequest());
+      const second = await GET(paidRequest());
+
+      expect(first.status).toBe(503);
+      expect(second.status).toBe(503);
+      expect(await first.json()).toEqual({ error: 'license_check_unavailable' });
+      expect(await second.json()).toEqual({ error: 'license_check_unavailable' });
+      expect(vi.mocked(hasLicense)).toHaveBeenCalledTimes(2);
+      expect(adapter).not.toHaveBeenCalled();
+      expect(callsTo(fetchMock, 'settle')).toHaveLength(0);
+      expect(relayCallsTo(fetchMock, 'settle')).toHaveLength(0);
+    },
+  );
+
+  it('returns 503 without settling when verification omits payer', async () => {
+    fetchMock = fetchFor({ verify: { isValid: true } });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await GET(request());
+
+    expect(res.status).toBe(503);
+    expect(await res.json()).toEqual({ error: 'license_check_unavailable' });
+    expect(vi.mocked(hasLicense)).not.toHaveBeenCalled();
+    expect(adapter).not.toHaveBeenCalled();
+    expect(callsTo(fetchMock, 'settle')).toHaveLength(0);
+  });
+
+  it('accepts a valid session without checking on-chain ownership', async () => {
+    licenseGateMock.check.mockReturnValue({ address: payer, tokenId: 1n, exp: 2_000_000_000 });
+    const paidRequest = new Request(url(), {
+      headers: {
+        Authorization: 'Bearer valid-license-session',
+        'X-PAYMENT': paymentHeader,
+      },
+    });
+
+    const res = await GET(paidRequest);
+
+    expect(res.status).toBe(200);
+    expect(licenseGateMock.check).toHaveBeenCalledWith('valid-license-session');
+    expect(vi.mocked(hasLicense)).not.toHaveBeenCalled();
+    expect(callsTo(fetchMock, 'settle')).toHaveLength(1);
+  });
+
+  it('returns 403 for an invalid session presented without payment', async () => {
+    const res = await GET(
+      new Request(url(), { headers: { Cookie: 'license_session=invalid-license-session' } }),
+    );
+
+    expect(res.status).toBe(403);
+    expectNoStore(res);
+    expect(await res.json()).toMatchObject({
+      error: 'license_required',
+      product: 'https://open-pay.jp/products/license-product',
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('keeps a bare catalog probe at 402 with license metadata and untouched accepts', async () => {
+    const res = await GET(new Request(url()));
+    const body = (await res.json()) as Record<string, unknown>;
+
+    expect(res.status).toBe(402);
+    expect(body.accepts).toEqual([
+      { ...catalogAccept, resource: 'https://gateway.example.com/api/consult?q=hello' },
+    ]);
+    expect(body.license).toEqual({
+      required: true,
+      product: 'https://open-pay.jp/products/license-product',
+      contract: '0x2222222222222222222222222222222222222222',
+      tokenId: '0x01',
+      chainId: 137,
+    });
+  });
+
+  it('caches a payer ownership result for 60 seconds', async () => {
+    const first = await GET(request());
+    const second = await GET(request('?q=again'));
+
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
+    expect(vi.mocked(hasLicense)).toHaveBeenCalledTimes(1);
+    expect(callsTo(fetchMock, 'settle')).toHaveLength(2);
+  });
+
+  it('also caches a negative payer ownership result', async () => {
+    vi.mocked(hasLicense).mockResolvedValue({ holder: false, balance: 0n, blockNumber: 1n });
+
+    const first = await GET(request());
+    const second = await GET(request('?q=again'));
+
+    expect(first.status).toBe(403);
+    expect(second.status).toBe(403);
+    expect(vi.mocked(hasLicense)).toHaveBeenCalledTimes(1);
+    expect(adapter).not.toHaveBeenCalled();
+    expect(callsTo(fetchMock, 'settle')).toHaveLength(0);
+  });
+
+  it('fails closed with a generic body when license configuration is missing', async () => {
+    vi.stubEnv('LICENSE_CHAIN_ID', undefined);
+    resetLicenseForTests();
+
+    const res = await GET(new Request(url()));
+    const text = await res.text();
+
+    expect(res.status).toBe(500);
+    expect(res.headers.get('cache-control')).toBe('no-store');
+    expect(JSON.parse(text)).toEqual({ error: 'license_config_missing' });
+    expect(text).not.toContain('LICENSE_CHAIN_ID');
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

@@ -44,10 +44,47 @@ npm run dev
 | `IC_HOST` | いいえ | IC エンドポイント。既定は `https://icp-api.io` |
 | `IC_IDENTITY_SEED` | 強く推奨 | 設定時は SHA-256 から決定的な Ed25519 identity を生成。未設定なら匿名 identity になるが、coo-icp は caller 毎に会話履歴を保持し**匿名 principal の履歴は誰でも読める**ため、必ずランダムな秘密値を設定すること |
 | `UPSTREAM_URL` | `http` 時 | JSON を返す上流 API URL |
+| `LICENSE_CHAIN_ID` | はい | ライセンス NFT のチェーン ID |
+| `LICENSE_CONTRACT` | はい | ライセンス NFT コントラクトの `0x` アドレス |
+| `LICENSE_TOKEN_ID` | はい | ライセンス NFT の `0x` 形式 token ID |
+| `LICENSE_PRODUCT_ID` | はい | OpenPay のライセンス商品 ID |
+| `LICENSE_PRODUCT_URL` | はい | ライセンス購入ページの URL |
+| `LICENSE_SESSION_SECRET` | はい | 32 UTF-8 bytes 以上の server-only ランダム秘密値 |
+| `POLYGON_RPC_URL` | はい | ライセンス保有を確認する Polygon RPC URL |
 
 `http` アダプタは `UPSTREAM_URL` に `q` クエリを付けて GET し、その JSON を返します。coo-icp は `chat(q)` の応答を `{ "answer": "..." }` として返します。
 
 coo-icp canister は caller (principal) 毎に会話履歴を蓄積して LLM のコンテキストに使うため、ゲートウェイは「1 支払い = 独立した 1 問 1 答」を守る目的で毎回 `chat` の前に `clear_conversation` を呼びます (per-caller なので他の利用者の会話には影響しません)。なお同時に複数の支払いリクエストが重なった場合、clear と chat の間に他のリクエストが割り込み、直前の質問が文脈に混ざる可能性が理論上残ります (低トラフィックでは実質問題になりません)。
+
+## ライセンス購入 → 接続 → 従量利用
+
+このバージョンでは OpenPay ライセンス NFT が入場条件です。まず `LICENSE_PRODUCT_URL` のページでライセンスを購入し、保有ウォレットを接続してから、従来どおり各リクエストを JPYC または USDC で支払います。
+
+接続では、最初にウォレット用の署名メッセージを取得します。
+
+```sh
+curl -sS "https://your-gateway.example/license/challenge?address=0xYOUR_WALLET_ADDRESS"
+```
+
+返された `message` をそのウォレットで署名し、署名結果を検証します。
+
+```sh
+curl -i -X POST "https://your-gateway.example/license/verify" \
+  -H 'content-type: application/json' \
+  --data '{"message":"SIGNED_MESSAGE_TEXT","signature":"0xWALLET_SIGNATURE"}'
+```
+
+成功レスポンスの `token` は HttpOnly cookie にも設定されます。cookie を使わないクライアントは、その token を Bearer として従量課金リクエストに添付します（支払いヘッダは従来どおり別途必要です）。
+
+```sh
+curl -i "https://your-gateway.example/api/consult?q=こんにちは" \
+  -H "Authorization: Bearer $LICENSE_SESSION_TOKEN" \
+  -H "X-PAYMENT: $X402_PAYMENT"
+```
+
+ライセンス設定は起動時と各リクエストで fail-closed 検証され、上表の 7 変数はすべて必須です。**既存のデプロイも、このバージョンをデプロイする前に 7 変数を追加してください。** 値の欠落時はサーバーが起動せず、serverless の cold start 経路でも API 利用を拒否します。
+
+challenge の nonce はインスタンス内メモリにあります。serverless で challenge と verify が別インスタンスに届くと `invalid_nonce` になる場合があるため、その場合は challenge から再試行してください。x402 支払いの payer を直接確認する経路には、この制約は影響しません。
 
 ## Vercel へのデプロイ
 

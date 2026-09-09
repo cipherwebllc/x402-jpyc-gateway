@@ -13,6 +13,7 @@
   "dependencies": {
     "@icp-sdk/core": "^6.0.0",
     "next": "^16.2.10",
+    "openpay-x402-sdk": "^0.7.1",
     "react": "^19.2.7",
     "react-dom": "^19.2.7"
   },
@@ -23,6 +24,7 @@
     "eslint": "^9.39.5",
     "eslint-config-next": "^16.2.10",
     "typescript": "^6.0.3",
+    "viem": "^2.45.0",
     "vitest": "^4.1.10"
   }
 }

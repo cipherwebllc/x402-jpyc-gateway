@@ -308,7 +308,171 @@ network='base' → USDC・'eip155:137' → JPYC (既存テスト無変更で通�
 JPYC 経路 (accepts[0]・callFacilitator・verify→adapter→settle 順) の変更 / 判定 body 以外を
 根拠に解錠 / USDC 面の失敗で JPYC を止める / 金銭フィールドの手組み。
 
-## 14. 既存スキャフォールド
+## 14. ライセンス NFT 入場ゲート — 2026-09-09 設計デルタ
+
+依存: `openpay-x402-sdk ^0.7.0` (公開確認済み・viem ^2.45 に依存 → テスト用 viem は
+devDependencies に明記)。SDK の index.d.ts (実物確認済み) が正:
+`hasLicense(LicenseIdentity & LicenseTransport & {address}) → {holder, balance, blockNumber}`
+(RPC 失敗は `LicenseRpcError` throw)、`createLicenseGate({chainId, contract, tokenId, rpcUrl |
+publicClient, origin, session:{secret(≥32B), ttlSeconds}}) → { challenge(addr)→Promise<string>,
+verify({message, signature})→Promise<token>, check(token)→{address, tokenId, exp} (同期・throw
+= LicenseError code invalid_session/session_expired 等) }`。tokenId は bigint | 0x hex。
+
+### env (全部必須・欠落は fail-closed)
+
+LICENSE_CHAIN_ID / LICENSE_CONTRACT / LICENSE_TOKEN_ID (0x hex) / LICENSE_PRODUCT_ID /
+LICENSE_PRODUCT_URL / LICENSE_SESSION_SECRET (≥32 bytes・server-only・ログ禁止) /
+POLYGON_RPC_URL。gate の origin は MY_RESOURCE_URL の origin から導出 (新 env 不要)。
+
+### 裁定 (仕様の緊張点の解決)
+
+1. **掲載プローブには従来どおり 402**: OpenPay の毎時再検証は 402 を要求し、403 は確定違反
+   3 回で非表示になる。よって「支払いヘッダもセッションも無い素の GET」は 402 のまま。
+   仕様の「ライセンスが無い相手に 402 を先に返さない」は次で満たす:
+   (a) Bearer/cookie を提示したが無効・期限切れで**支払いヘッダも無い**相手 → 403
+   (b) 支払いを携えた相手は verify で payer 確定後・**settle 前**に hasLicense、無保有なら
+   403 (課金ゼロ)。402 の body に top-level `license: { required: true, product, contract,
+   tokenId, chainId }` を追加して未保有者を購入ページへ誘導する (accepts は description 含め
+   一切触らない — カタログ照合とドリフトさせない。掲載説明文は open-pay.jp 側で編集)。
+2. **fail-closed は二段構え**: `instrumentation.ts` の register() で全 env を検証し欠落を
+   列挙して throw (= `next start`/Vercel 起動時に明示失敗)。加えて lib/license の config は
+   初回利用時にも同じ検証を行い 500 を返す (serverless cold start の defense)。module scope
+   throw は `next build` とテストを壊すため使わない。**license env が全部未設定でも拒否**
+   (仕様どおり)。既存デプロイは env 追加が必須になる — README に明記。
+3. **既存テスト**: route テストの共通 beforeEach に license env スタブ + SDK モック
+   (hasLicense=holder:true) を足すだけで、既存テスト本体は不変更のまま緑を維持する。
+
+### 実装
+
+- `lib/license.ts`: config 検証 (欠落列挙 throw・LICENSE_TOKEN_ID は ^0x[0-9a-fA-F]+ 検証・
+  secret ≥32 bytes 検証)、`createLicenseGate` の遅延シングルトン (origin = MY_RESOURCE_URL
+  origin・rpcUrl = POLYGON_RPC_URL)、`payerHasLicense(address)`: hasLicense を 60 秒メモリ
+  キャッシュ (holder true/false ともキャッシュ・**LicenseRpcError はキャッシュせず re-throw**)、
+  テスト用 reset。SDK からの import は型含め index.d.ts の実名どおり。
+- `app/license/challenge/route.ts` GET `?address=0x…` → 400 (address 不正) /
+  200 `{ message }` (gate.challenge)。no-store。
+- `app/license/verify/route.ts` POST `{ message, signature }` → gate.verify 成功で
+  200 `{ token, address, exp }` (check で読み出し) + `Set-Cookie: license_session=<token>;
+  HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=<ttl>`。LicenseError は code に応じ
+  403 (no_license) / 400 (それ以外の検証系) / 503 (LicenseRpcError)。**署名・secret・token を
+  ログに出さない** (console 禁止は継続)。
+- `app/health/route.ts` GET → 200 `{ status:'ok', license: { required: true, chainId,
+  contract, tokenId, productId, product } }` (公開情報のみ・no-store)。
+- `app/api/consult/route.ts` の順序 (JPYC/USDC 両レール共通・x402 意味論は不変更):
+  1. license config 検証 (欠落 → 500)
+  2. Bearer / cookie があれば gate.check → 有効なら **licensed** (以降 hasLicense 省略)。
+     無効/期限切れ + 支払いヘッダ無し → 403 license_required。無効でも支払いヘッダが
+     あれば無視して次へ (payer 保有で救済)
+  3. 支払いヘッダ無し → 402 (license フィールド付き・従来 accepts 不変)
+  4. q 検証 400 → decode → レール判定 (既存)
+  5. verify (既存どおり)。isValid true で **未 licensed なら**: payer を判定
+     (`verification.payer` が string でなければ 503 license_check_unavailable・settle しない)
+     → `payerHasLicense(payer)` false → 403 `{ error:'license_required', product, contract,
+     tokenId }` (settle しない = 課金ゼロ)。LicenseRpcError → 503
+     `{ error:'license_check_unavailable' }` (false 扱い禁止・settle しない)
+  6. 以降は既存どおり: アダプタ + 直列化 → settle → 200
+- `instrumentation.ts` (repo root): `export async function register()` で config 検証。
+- 既知の制約 (README に明記): challenge/verify の nonce はインスタンス内メモリのため、
+  serverless で別インスタンスに当たると invalid_nonce になり得る (リトライで解消。依存追加
+  なしの範囲の制約。x402 支払者直接確認の経路 b は影響なし)。
+
+### テスト
+
+- 既存 route テスト: 共通セットアップに license env + SDK モック (holder true) を追加し
+  全て緑のまま。
+- 追加 (route): 保有あり → settle まで到達 / 保有なし → 403 license_required +
+  settle・アダプタ未呼出 / LicenseRpcError → 503 + settle 未呼出 (JPYC・USDC 両レール) /
+  payer 欠落 → 503 / 有効セッション (check モック) → hasLicense 未呼出で従量課金へ /
+  無効トークン + 支払い無し → 403 / 素の GET → 402 + body.license / 60 秒キャッシュ
+  (2 回目で hasLicense 1 回) / env 欠落 → 500 (欠落名は body に出さない)。
+- `test/license.test.ts`: **実 SDK** の createLicenseGate に fake publicClient
+  (getChainId/getBlockNumber/readContract で balance 1) を注入し、viem の
+  privateKeyToAccount で challenge → signMessage → verify → check の一周を検証。
+  challenge/verify HTTP route は SDK モックで配線を検証。
+- 完了条件: typecheck / lint / test 全緑。**push は env 未設定の本番を壊すため保留**
+  (ユーザーが Vercel に license env を設定してから)。
+
+## 15. ライセンスゲート簡素化 (SDK 0.7.1「商品 ID 指定」) — 2026-09-09 設計デルタ
+
+§14 の 7 変数版を、`openpay-x402-sdk ^0.7.1` (公開確認済み・viem ^2.45 のみ依存) の
+商品 ID 指定 API に切り替える。x402 従量課金 (JPYC/USDC・402・verify→adapter→settle) は不変。
+
+### SDK 0.7.1 実 API (index.d.ts 確認済み)
+
+- `resolveLicense({ product, origin? }) → Promise<LicenseDescriptor>`:
+  `{ version:1, productId, chainId:137|80002, contract, tokenId(Hex), productUrl, verifyUrl,
+  saleActive, registered, transferable, termsUrl, termsVersion, supply, remaining, sellerRole }`。
+  origin は HTTPS 必須 (既定 https://open-pay.jp)。リダイレクト拒否・product echo と tokenId
+  導出を検証済みの信頼値。
+- `hasLicense(LicenseSelector & LicenseTransport & { address })`: Selector は
+  `{chainId, contract, tokenId}` (identity 形) または `{product, origin?}` (product 形)。
+  RPC 失敗は `LicenseRpcError` (code 'rpc_error')。rpcUrl 未指定なら Polygon 既定 RPC。
+- `createLicenseGate({ product, origin?, rpcUrl?, session: { secret, ttlSeconds?, origin? } })`:
+  product 形では `origin` = descriptor の取得先 (open-pay.jp)、`session.origin` = このサービスの
+  署名オリジン/audience。`ready()` が descriptor を解決・保持 (product 形)。`check()` は
+  ready 前に LicenseError `not_ready` を throw。
+
+### env (必須 2 つ・任意 2 つ)
+
+| 変数 | 必須 | 意味 |
+|---|---|---|
+| LICENSE_PRODUCT_ID | ✔ | `h_` + 32 hex。形式検証 |
+| LICENSE_SESSION_SECRET | ✔ | ≥32 UTF-8 bytes・server-only |
+| POLYGON_RPC_URL | - | 未設定なら SDK の Polygon 既定 RPC |
+| LICENSE_ORIGIN | - | descriptor 取得先。既定 https://open-pay.jp (HTTPS 必須) |
+
+LICENSE_CHAIN_ID / LICENSE_CONTRACT / LICENSE_TOKEN_ID / LICENSE_PRODUCT_URL は**削除**
+(descriptor から取得)。ゲートウェイ自身の署名オリジンは MY_RESOURCE_URL の origin。
+
+### 起動 (fail-closed)
+
+`lib/license.ts` に `ensureLicense(): Promise<LicenseRuntime>` — 単一飛行の Promise を
+モジュールで保持: env 検証 → `resolveLicense({ product, origin })` → `createLicenseGate(...)`
++ `await gate.ready()` → `{ descriptor, gate, config }`。失敗時は保持 Promise を破棄して
+throw (復旧したら次回再試行)。`instrumentation.ts` の `register()` で `await ensureLicense()`
+= 起動時に明示失敗 (env 欠落・descriptor 取得失敗とも)。各 route も冒頭で `ensureLicense()`
+を await し、失敗は 500 `{ error: 'license_unavailable' }` (generic・env 名/URL を出さない)。
+
+### 保有判定 (裁定: identity 形を使う)
+
+`payerHasLicense(address)` は **起動時 descriptor の `{chainId, contract, tokenId}` (identity
+形) + rpcUrl?** で `hasLicense` を呼ぶ。理由: 仕様の product 形は毎回 open-pay.jp へ descriptor
+を再取得するため、支払い判定経路に外部 HTTP 依存と別クラスの失敗 (network/http_error) が
+増える。起動時に取得済みの信頼値を使えば判定は RPC だけに依存し、仕様の「起動時に取得して
+保持」とも整合する。60 秒メモリキャッシュ (true/false)・`LicenseRpcError` は非キャッシュで
+re-throw。既存の順序 (verify で payer 確定 → **settle 前**に判定 → 403 で課金ゼロ) は §14 のまま。
+
+### レスポンス
+
+- 403: `{ error: 'license_required', product: <LICENSE_PRODUCT_ID>, productUrl }`
+- 503: `{ error: 'license_check_unavailable' }` (LicenseRpcError・payer 欠落・その他判定不能)
+- 402 body の top-level `license`: `{ required: true, product, productUrl, chainId, contract,
+  tokenId }` (accepts は description 含め不変 — §14 裁定 1 のまま。掲載プローブは 402 維持)
+- `/health`: `{ status:'ok', license: { required:true, product, productUrl, chainId, contract,
+  tokenId, saleActive } }`
+- `/license/challenge`・`/license/verify`・Bearer/cookie 判定は §14 のまま (gate が product 形に
+  なるだけ)。`check()` の `not_ready` は ensureLicense 後には起きないが、起きたら 503。
+
+### README / .env.example
+
+旧 7 変数の記述を削除し、2 必須 + 2 任意に置換。購入 → 接続 → 従量利用の流れと curl 手順は
+維持。descriptor 取得失敗 = 起動失敗である旨を明記。
+
+### テスト
+
+- SDK モック: `resolveLicense` (descriptor fixture: chainId 137・contract・tokenId・productUrl)、
+  `hasLicense`、`createLicenseGate` (ready→descriptor / check)。
+- route: 保有あり → settle 到達 / 無保有 → 403 (product, productUrl) + settle・adapter 未呼出 /
+  LicenseRpcError → 503 + settle 未呼出 / **resolveLicense 失敗 → ensureLicense reject =
+  instrumentation register() が throw し route は 500** / hasLicense に渡る identity が
+  descriptor 由来であること / 402 body.license に productUrl / 両レール。
+- `test/license.test.ts`: 実 SDK の createLicenseGate を **identity 形 + fake publicClient** で
+  一周 (product 形は open-pay.jp への HTTPS が必要なため単体では identity 形で検証)、
+  route 配線は SDK モック。
+- 既存 x402 テストは共通セットアップの env スタブを 2 変数に置換するだけで本体不変。
+- 完了条件 typecheck / lint / test 全緑。push は保留 (feature ブランチ運用)。
+
+## 16. 既存スキャフォールド
 
 設計者 (Fable) が先行作成済み — 実装時はこれを土台に完成・修正してよい:
 - package.json / tsconfig.json (スクリプト・paths 設定済み、依存は未インストール)
