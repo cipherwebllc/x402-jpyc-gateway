@@ -1,4 +1,4 @@
-import { LicenseError, LicenseRpcError } from 'openpay-x402-sdk';
+import { LicenseError } from 'openpay-x402-sdk';
 
 import { selectedAdapter } from '@/lib/adapters';
 import {
@@ -15,11 +15,11 @@ import {
   type VerifyResult,
 } from '@/lib/gate';
 import {
-  getLicenseConfig,
-  getLicenseGate,
+  ensureLicense,
   payerHasLicense,
-  type LicenseConfig,
+  type LicenseRuntime,
 } from '@/lib/license';
+import { licenseFailure, licenseMetadata, licenseRequired } from '@/lib/license-http';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -37,34 +37,10 @@ function jsonError(status: number, error: string): Response {
 function paymentError(
   accepts: PaymentRequirements[],
   error: string,
-  config: LicenseConfig,
+  license: LicenseRuntime,
   paymentRequiredHeader?: string,
 ): Response {
-  return json402(accepts, error, paymentRequiredHeader, {
-    required: true,
-    product: config.product,
-    contract: config.contract,
-    tokenId: config.tokenId,
-    chainId: config.chainId,
-  });
-}
-
-function licenseRequired(config: LicenseConfig): Response {
-  return new Response(
-    JSON.stringify({
-      error: 'license_required',
-      product: config.product,
-      contract: config.contract,
-      tokenId: config.tokenId,
-    }),
-    {
-      status: 403,
-      headers: {
-        'content-type': 'application/json',
-        'cache-control': 'no-store',
-      },
-    },
-  );
+  return json402(accepts, error, paymentRequiredHeader, licenseMetadata(license));
 }
 
 function cookieValue(cookieHeader: string | null, name: string): string | undefined {
@@ -90,26 +66,25 @@ function sessionToken(request: Request): string | undefined {
 
 async function payerLicenseError(
   verification: VerifyResult,
-  config: LicenseConfig,
+  license: LicenseRuntime,
 ): Promise<Response | null> {
   if (typeof verification.payer !== 'string') {
     return jsonError(503, 'license_check_unavailable');
   }
   try {
-    if (!(await payerHasLicense(verification.payer))) return licenseRequired(config);
+    if (!(await payerHasLicense(license, verification.payer))) return licenseRequired(license);
     return null;
   } catch (error) {
-    if (error instanceof LicenseRpcError) return jsonError(503, 'license_check_unavailable');
-    return jsonError(503, 'license_check_unavailable');
+    return licenseFailure(error, license);
   }
 }
 
 export async function GET(request: Request): Promise<Response> {
-  let licenseConfig: LicenseConfig;
+  let license: LicenseRuntime;
   try {
-    licenseConfig = getLicenseConfig();
+    license = await ensureLicense();
   } catch {
-    return jsonError(500, 'license_config_missing');
+    return jsonError(500, 'license_unavailable');
   }
 
   const paymentHeader = request.headers.get('X-PAYMENT');
@@ -119,14 +94,14 @@ export async function GET(request: Request): Promise<Response> {
   let licensed = false;
   if (token) {
     try {
-      getLicenseGate().check(token);
+      license.gate.check(token);
       licensed = true;
     } catch (error) {
       const invalidSession =
         error instanceof LicenseError &&
         (error.code === 'invalid_session' || error.code === 'session_expired');
-      if (!invalidSession) return jsonError(500, 'license_check_unavailable');
-      if (!hasPayment) return licenseRequired(licenseConfig);
+      if (!invalidSession) return licenseFailure(error, license);
+      if (!hasPayment) return licenseRequired(license);
     }
   }
 
@@ -143,7 +118,7 @@ export async function GET(request: Request): Promise<Response> {
     return paymentError(
       allAccepts,
       'payment_required',
-      licenseConfig,
+      license,
       usdc?.paymentRequiredHeader,
     );
   }
@@ -161,7 +136,7 @@ export async function GET(request: Request): Promise<Response> {
       return paymentError(
         allAccepts,
         'invalid_payment_payload',
-        licenseConfig,
+        license,
         usdc?.paymentRequiredHeader,
       );
     }
@@ -188,13 +163,13 @@ export async function GET(request: Request): Promise<Response> {
       return paymentError(
         allAccepts,
         verification?.invalidReason ?? 'payment_invalid',
-        licenseConfig,
+        license,
         usdc?.paymentRequiredHeader,
       );
     }
 
     if (!licensed) {
-      const error = await payerLicenseError(verification, licenseConfig);
+      const error = await payerLicenseError(verification, license);
       if (error) return error;
     }
 
@@ -218,7 +193,7 @@ export async function GET(request: Request): Promise<Response> {
       return paymentError(
         allAccepts,
         settlement?.errorReason ?? 'settlement_failed',
-        licenseConfig,
+        license,
         usdc?.paymentRequiredHeader,
       );
     }
@@ -243,13 +218,13 @@ export async function GET(request: Request): Promise<Response> {
     return paymentError(
       allAccepts,
       verification.invalidReason ?? 'invalid_payment',
-      licenseConfig,
+      license,
       usdc?.paymentRequiredHeader,
     );
   }
 
   if (!licensed) {
-    const error = await payerLicenseError(verification, licenseConfig);
+    const error = await payerLicenseError(verification, license);
     if (error) return error;
   }
 
@@ -273,7 +248,7 @@ export async function GET(request: Request): Promise<Response> {
     return paymentError(
       allAccepts,
       settlement.errorReason ?? 'settlement_failed',
-      licenseConfig,
+      license,
       usdc?.paymentRequiredHeader,
     );
   }

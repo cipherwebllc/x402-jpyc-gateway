@@ -1,29 +1,26 @@
-import { LicenseError, LicenseRpcError } from 'openpay-x402-sdk';
-
 import {
-  getLicenseGate,
-  LicenseConfigError,
+  ensureLicense,
   LICENSE_SESSION_TTL_SECONDS,
+  type LicenseRuntime,
 } from '@/lib/license';
+import { licenseFailure, licenseJson } from '@/lib/license-http';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-function json(status: number, body: Record<string, unknown>, cookie?: string): Response {
-  const headers = new Headers({
-    'content-type': 'application/json',
-    'cache-control': 'no-store',
-  });
-  if (cookie) headers.set('set-cookie', cookie);
-  return new Response(JSON.stringify(body), { status, headers });
-}
-
 export async function POST(request: Request): Promise<Response> {
+  let license: LicenseRuntime;
+  try {
+    license = await ensureLicense();
+  } catch {
+    return licenseJson(500, { error: 'license_unavailable' });
+  }
+
   let input: unknown;
   try {
     input = await request.json();
   } catch {
-    return json(400, { error: 'invalid_request' });
+    return licenseJson(400, { error: 'invalid_request' });
   }
 
   if (
@@ -33,16 +30,15 @@ export async function POST(request: Request): Promise<Response> {
     typeof (input as { signature?: unknown }).signature !== 'string' ||
     !/^0x[0-9a-fA-F]+$/.test((input as { signature: string }).signature)
   ) {
-    return json(400, { error: 'invalid_request' });
+    return licenseJson(400, { error: 'invalid_request' });
   }
 
   try {
-    const gate = getLicenseGate();
-    const token = await gate.verify({
+    const token = await license.gate.verify({
       message: (input as { message: string }).message,
       signature: (input as { signature: `0x${string}` }).signature,
     });
-    const session = gate.check(token);
+    const session = license.gate.check(token);
     const cookie = [
       `license_session=${encodeURIComponent(token)}`,
       'HttpOnly',
@@ -51,16 +47,8 @@ export async function POST(request: Request): Promise<Response> {
       'Path=/',
       `Max-Age=${LICENSE_SESSION_TTL_SECONDS}`,
     ].join('; ');
-    return json(200, { token, address: session.address, exp: session.exp }, cookie);
+    return licenseJson(200, { token, address: session.address, exp: session.exp }, cookie);
   } catch (error) {
-    if (error instanceof LicenseConfigError) return json(500, { error: 'license_config_missing' });
-    if (error instanceof LicenseRpcError) {
-      return json(503, { error: 'license_check_unavailable' });
-    }
-    if (error instanceof LicenseError) {
-      if (error.code === 'no_license') return json(403, { error: 'license_required' });
-      return json(400, { error: 'license_verification_failed' });
-    }
-    return json(500, { error: 'license_verification_failed' });
+    return licenseFailure(error, license);
   }
 }

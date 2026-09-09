@@ -1,5 +1,5 @@
-import { getLicenseConfig } from '@/lib/license';
+import { ensureLicense } from '@/lib/license';
 
 export async function register(): Promise<void> {
-  getLicenseConfig();
+  await ensureLicense();
 }

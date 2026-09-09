@@ -472,6 +472,57 @@ re-throw。既存の順序 (verify で payer 確定 → **settle 前**に判定 
 - 既存 x402 テストは共通セットアップの env スタブを 2 変数に置換するだけで本体不変。
 - 完了条件 typecheck / lint / test 全緑。push は保留 (feature ブランチ運用)。
 
+### 計画レビュー裁定 (Codex GPT 6 Astra xHigh, 2026-09-09) — **以下が §15 の上書き確定版**
+
+採用:
+1. **descriptor は単一取得**: `resolveLicense({ product, origin })` を 1 回だけ呼び、その結果の
+   identity `{chainId, contract, tokenId}` で **identity 形の** `createLicenseGate` を組む
+   (product 形 gate + 別途 resolveLicense だと 2 回取得され不整合が起きうる — SDK 実装で確認)。
+   `gate.ready()` は identity 形では IO なし (undefined) だが仕様どおり await する。
+   保有判定・SIWE・/health・403 は全部この 1 つの descriptor から導出。
+2. **起動 fail-closed は仕様どおり厳格** (env 不正・descriptor 取得失敗とも `register()` で
+   throw)。ただし Next 16 は register の reject をキャッシュし `next start` では終了する、
+   route-module 経路は register を await しない — という実装事実から、**復旧は「プロセス/
+   インスタンスの再起動 (Vercel は次のコールドスタート)」であり、次リクエストでの自動復旧は
+   保証されない**ことを README に明記する。各 route は `ensureLicense()` を await し、失敗は
+   generic 500 `{ error: 'license_unavailable' }` (route 側の単一飛行 Promise は失敗時に破棄し
+   再試行可能にする — register が await されないインスタンスでの防御)。
+3. **鮮度ポリシー**: descriptor は **5 分**で期限切れ。期限後の最初のリクエストで単一飛行の
+   再解決。identity 不変なら metadata (productUrl/saleActive 等) だけ更新し gate/nonce は
+   維持。identity 変化 (contract/chain の再登録) なら runtime を原子的に差し替え、保有キャッシュ
+   を無効化 (キャッシュ key は `chainId:contract:tokenId:address`)。**再解決に失敗したときは
+   last-known-good を保持し 30 秒のクールダウン後に再試行** (descriptor 権威の一時障害で JPYC
+   販売を止めない — tokenId は商品 ID に束縛され変化不能、contract 変更は協調移行イベント
+   なので陳腐化リスクは限定的。dual-rail の「付帯面の障害で本体を止めない」と同じ判断)。
+   リクエストごとに runtime を 1 回キャプチャして最後まで同じものを使う。
+4. **エラー分類** (全 route 共通・body は固定文言のみ):
+   初期化失敗 → 500 `license_unavailable` / `LicenseRpcError`・`nonce_store_error`・
+   `not_ready` → 503 `license_check_unavailable` / `no_license` → 403
+   `{ error:'license_required', product, productUrl }` (**/license/verify も同スキーマ**) /
+   challenge・signature・nonce の検証失敗 (`invalid_challenge`, `challenge_expired`,
+   `invalid_signature`, `invalid_nonce`) → 400 `license_verification_failed` /
+   /api/consult の無効・期限切れセッションは従来どおり支払い payer 判定へフォールバック。
+5. **product 形の実 SDK テストは可能** (`fetch` 注入 + fake publicClient) — identity 形に加えて
+   product 形 gate の一周 (descriptor 検証・audience・not_ready・並行 ready で fetch 1 回・
+   balanceOf 引数・同期 check) も実 SDK で検証する。テスト拡張: ensureLicense の並行呼出/失敗
+   後の再試行成功/refresh と identity 変化時のキャッシュ無効化、discovery 4 エラー種、
+   両レール (USDC v1 ヘッダ経路含む) の verify→license→adapter→settle 順、payer 欠落/不正、
+   cookie セッション、期限切れ、無効セッション+支払いの救済、60 秒キャッシュ**期限切れ**
+   (fake timers)、4 route の generic 初期化エラー + no-store。起動失敗テストは対象テスト内でのみ
+   reject させ (register と route の両試行分)、afterEach で runtime/キャッシュ/モック実装を
+   リセット (`vi.clearAllMocks` は履歴のみ)。
+6. **nonce ストア制約の正確な記述**: インスタンスが異なると challenge を取り直しても解消
+   しない場合がある (共有ストアなしでは保証不可・SDK の `nonceStore` で将来対応可能・依存追加
+   なしの今回はスコープ外)。verify は RPC 前に nonce を消費するため RPC 失敗後は新しい
+   challenge + 署名が必要。x402 payer 直接判定の経路は無影響。
+7. 細部: `LICENSE_PRODUCT_ID` は `^h_[0-9a-f]{32}$` (小文字)。`MY_RESOURCE_URL` は session
+   audience 用に引き続き必須。`saleActive`/`registered` は所有判定ではない (表示のみ)。
+   `LICENSE_ORIGIN` を変えても SDK の検証は productUrl/verifyUrl が open-pay.jp 配下である
+   ことを要求する。402 body の `license` 案内は初期化成功時のみ (fail-closed が優先)。
+
+却下: なし (「register で discovery 失敗を握って routes だけ 500」の代替案は、仕様の
+「取得失敗は起動失敗」を優先して不採用。ただし裁定 2 のとおり復旧セマンティクスは明記)。
+
 ## 16. 既存スキャフォールド
 
 設計者 (Fable) が先行作成済み — 実装時はこれを土台に完成・修正してよい:
