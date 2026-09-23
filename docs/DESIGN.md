@@ -1,7 +1,7 @@
 # x402-jpyc-gateway 設計ドキュメント
 
 Status: final (Sonnet 調査 + Codex GPT-5.6 Terra xhigh 計画レビュー裁定済み — これが実装仕様)
-Date: 2026-07-15
+Date: 2026-07-15 (seller pin 対応: 2026-09-23、§15)
 
 ## 1. ゴール
 
@@ -12,15 +12,18 @@ Next.js App Router (TypeScript)、Vercel にデプロイ可能。
 
 ## 2. 非ゴール (やらないこと)
 
-- 独自の価格/手数料ロジック — カタログ accepts が唯一の権威。価格・受取ウォレットは
-  この repo の env に持たない (OpenPay 登録時に決まる)
+- 独自の価格/手数料ロジック — 価格・手数料はカタログ accepts を使う。
+  出品 ID と受取ウォレットは env に固定し、取得した決済条件を照合する (§15)。
 - 会話の継続 (1 支払い = 独立した 1 問 1 答)
 - coo-icp 本体の変更
 
 ## 3. ファイル構成と責務
 
 ```
-lib/gate.ts               OpenPay 402 ゲート (公式スニペットの TS 化 + 2 変更)
+lib/gate.ts               OpenPay 402 ゲート (公式スニペットの TS 化 + 2 変更 + seller pin)
+lib/sellerPins.ts         必須設定・JPYC/USDC の seller pin 検証
+lib/paymentHeader.ts      買い手/USDC requirements 共通の厳密な base64/JSON デコード
+instrumentation.ts       Next.js サーバー起動時の必須設定検査
 lib/adapters/types.ts     Adapter = (input: { q: string }) => Promise<unknown>
 lib/adapters/http.ts      汎用: UPSTREAM_URL に ?q= を付けて GET、JSON 中継
 lib/adapters/coo-icp.ts   @icp-sdk/core (agent) で canister chat(text) を update call
@@ -28,18 +31,19 @@ lib/adapters/index.ts     env ADAPTER による選択 (coo-icp | http)
 app/api/consult/route.ts  GET ハンドラ (処理順は §5)
 app/layout.tsx, page.tsx  最小の説明ページ (無くてもよいが案内用に置く)
 test/route.test.ts        ゲート+route の結合テスト (fetch/adapter 全モック)
+test/gate.test.ts         起動設定・出品 pin・キャッシュ・USDC 決済条件のテスト
 test/coo-icp.test.ts      アダプタ単体 (Actor モック)
 README.md                 セットアップ / env / デプロイ / 掲載手順 / curl 確認
 ```
 
 ## 4. OpenPay x402 契約 (最重要)
 
-土台は OpenPay 公式配布の自己完結ゲート (仕様書に全文あり)。意味論を変えないこと:
+土台は OpenPay 公式配布の自己完結ゲート。seller pin は SDK 0.10.0 に準拠 (§15):
 
-- `GET https://open-pay.jp/api/discovery` → `{ items: [{ resource, accepts: [...] }] }`
-- `MY_RESOURCE_URL` とカタログの `resource` が完全一致する item の accepts を採用、5 分キャッシュ
-- カタログ未掲載なら **throw → 500** (bootstrap の意図された挙動。掲載プローブは 500 を
-  「判定不能」として通す)
+- `GET https://open-pay.jp/api/discovery/<MY_RESOURCE_ID>` → `{ id, resource, accepts: [...] }`
+- ID・`MY_RESOURCE_URL`・全 JPYC merchant・forwarder を照合してから 5 分キャッシュ。URL 検索は禁止
+- 必須 pin 未設定は起動時の設定エラー。404 (未掲載/非公開) と 5xx (一時障害) は異なる
+  エラー・ログにする。取得・照合失敗の HTTP 応答は従来の **500 accepts_unavailable**
 - 402 応答 body: `{ x402Version: 1, accepts, error }`
 - verify/settle: `POST https://open-pay.jp/api/facilitator/{verify|settle}` に
   `{ x402Version: 1, paymentPayload, paymentRequirements: accepts[0] }`
@@ -47,7 +51,7 @@ README.md                 セットアップ / env / デプロイ / 掲載手順
   - settle 成功判定: `success === true` / 失敗理由 `errorReason`
 - 成功時レスポンスヘッダ `X-PAYMENT-RESPONSE` = base64(JSON.stringify(settle 結果))
 
-### 公式スニペットに加える 2 変更 (これ以外は変えない)
+### 公式スニペットに加える 2 変更 (seller pin の追加要件は §15)
 
 1. **resource の動的差し替え**: 402 応答と verify/settle に渡す accepts の各要素について、
    `resource` フィールドのみを「実際のリクエスト URL (クエリ `?q=...` 込み)」に差し替える。
@@ -63,7 +67,7 @@ README.md                 セットアップ / env / デプロイ / 掲載手順
 
 ```
 GET /api/consult?q=...
- 0. acceptsFor(request.url) — カタログ未掲載なら 500 { error: 'accepts_unavailable' }
+ 0. acceptsFor(request.url) — 出品取得・pin 検証失敗なら 500 { error: 'accepts_unavailable' }
  1. X-PAYMENT ヘッダなし → 402 + accepts (q 検証より優先: 掲載プローブは q なし GET に 402 を期待)
  2. q なし (X-PAYMENT あり) → 400 (支払い処理前に返す = 未課金)
  3. X-PAYMENT の base64/JSON デコード失敗 → 402 invalid_payment_payload
@@ -114,13 +118,20 @@ GET /api/consult?q=...
 | 変数 | 必須 | 説明 |
 |---|---|---|
 | MY_RESOURCE_URL | ✔ | OpenPay /discovery に登録した URL と完全一致 (クエリなし) |
+| MY_RESOURCE_ID | ✔ | 自分の出品 ID。前後の空白は不可。URL 検索へのフォールバックなし |
+| EXPECTED_RECIPIENT | ✔ | 自分の JPYC 受取ウォレット。extra.openpay.merchant と照合 (forwarder ではない) |
+| EXPECTED_USDC_RECIPIENT | - | 未設定・空なら JPYC のみ。設定時は OpenPay 側 USDC 面に登録した自分の受取先と照合 |
 | ADAPTER | - | `coo-icp` (default) / `http` |
 | COO_CANISTER_ID | coo-icp 時 ✔ | バックエンド canister ID |
 | IC_HOST | - | default `https://icp-api.io` |
 | IC_IDENTITY_SEED | - | 未設定なら匿名 identity |
 | UPSTREAM_URL | http 時 ✔ | 中継先 |
 
-価格・受取ウォレットは持たない (カタログが唯一の権威)。
+価格・手数料はカタログ値を使い、受取ウォレットは自分の設定で固定して照合する。
+設定する受取先は `0x` + 40 桁の hex が必須。discovery 応答から pin を自動設定しない。
+ゼロアドレス・`0x000000000000000000000000000000000000dead`・
+`0xdead000000000000000000000000000000000000` は設定を拒否する。
+起動時は全設定エラーをまとめて報告し、不正な値そのものはログに含めない。
 
 ## 8. テストマトリクス (vitest・fetch とアダプタは全モック)
 
@@ -134,7 +145,7 @@ route/gate (`test/route.test.ts`):
 | 5 | verify OK・アダプタ throw | 502、settle 未呼出 |
 | 6 | settle NG | 402 (errorReason)、body に answer なし |
 | 7 | 全部 OK | 200 + body + X-PAYMENT-RESPONSE = base64(settle JSON) |
-| 8 | カタログ未掲載 | 500 (bootstrap 挙動) |
+| 8 | 出品未掲載/非公開・取得失敗 | 500 accepts_unavailable、404 と 5xx はログで区別 |
 
 Codex レビュー採用分の追加ケース:
 | 9 | verify OK・アダプタ返り値が JSON 直列化不能 (BigInt 等) | 502、settle 未呼出 |
@@ -151,9 +162,10 @@ http アダプタも fetch モックで: q のエンコード・非 2xx で thro
 
 ## 9. プライバシー
 
-約束のスコープは「**このゲートウェイのアプリケーションログに残さない**」:
-`console.*` 出力禁止、エラーレスポンスに q や支払い内容を含めない、@icp-sdk の
-`logToConsole: false`、全レスポンス no-store。
+約束のスコープは「**質問・回答・支払いデータをこのゲートウェイのアプリケーションログに残さない**」:
+設定不足・出品取得失敗・pin/決済条件の不一致は固定の理由だけを `console.error` に記録する。
+ログとエラーレスポンスに q・回答・支払い内容・ウォレットアドレス・リソース URL を含めない。
+@icp-sdk の `logToConsole: false`、全レスポンス no-store。
 構造上 q は OpenPay (resource URL 内)・上流 (coo-icp / UPSTREAM_URL)・プラットフォームの
 アクセスログには渡りうる — この事実は README に明記する (約束を偽らない)。
 
@@ -182,7 +194,8 @@ http アダプタも fetch モックで: q のエンコード・非 2xx で thro
 
 ## 10.1 ライブ API 実地確認 (2026-07-15・curl で確認済みの事実)
 
-`GET https://open-pay.jp/api/discovery` は実際に以下を返した (WebFetch は 403 だが curl は通る):
+以下は旧カタログ API の調査記録。現在のゲートは §4 の ID 指定 API を使う。
+`GET https://open-pay.jp/api/discovery` は当時以下を返した (WebFetch は 403 だが curl は通る):
 
 - トップレベル: `{ x402Version: 1, items: [...] }`
 - item: `resource` / `description` / `category` / `priceJpyc` (文字列!) / `docsUrl` / `license` /
@@ -191,22 +204,27 @@ http アダプタも fetch モックで: q のエンコード・非 2xx で thro
   (atomic 文字列・価格+手数料 1 JPYC), `resource`, `description`, `mimeType`, `payTo`
   (= forwarder), `maxTimeoutSeconds: 600`, `asset` (JPYC v3 = 0xE7C3...c29, 18 decimals),
   `extra.openpay` (forwarder-split: merchant/merchantValue/feeReceiver/feeValue/commitVersion)
-- 含意: accepts は v1/v2 混在の OpenPay 独自拡張だが、本ゲートは accepts を**不透明な
-  オブジェクト**として扱い `resource` のみ差し替える設計なので影響なし。
+- 含意: accepts は v1/v2 混在の OpenPay 独自拡張。現在は §15 の seller pin を検証し、
+  `resource` のみ差し替える。金銭フィールドは書き換えない。
   `PaymentRequirements` 型は open な record にしておくこと (フィールドを列挙して絞らない)。
 
 ## 11. README に必ず書くこと
 
 1. セットアップ・env 表・Vercel デプロイ手順
-2. 掲載手順: デプロイ (この時点で GET は 500 = 正常) → open-pay.jp/discovery で SIWE 接続し
+2. Deploy ボタンの掲載手順: 仮 pin でデプロイ (設定エラー・全ルート 500 は想定どおり)
+   → 実 URL を取得 → open-pay.jp/discovery で SIWE 接続し
    URL=MY_RESOURCE_URL・価格 (JPYC 整数)・説明 (英語推奨・"1 question per payment, returns
    {answer}" 等エージェント可読)・カテゴリ api・Docs URL・利用条件 → 正当性表明 → 登録
+   → 実 URL・自分の出品 ID・JPYC 受取先を env に設定 → 再デプロイ (USDC 受取先は任意)。
+   カスタムドメインや重複しないプロジェクト名で URL が確定する場合は掲載から始められる。
 3. 掲載後 `curl -i $MY_RESOURCE_URL` が 402 + accepts を返す確認手順
 4. 買い手テスト (Claude Desktop + openpay-x402-mcp / sdk) と、catalog trust が URL 完全一致の
    ため `?q=` 付き URL への支払いに買い手側 env `ALLOWED_HOSTS=open-pay.jp,<ゲートウェイの
    ホスト>` が必要な旨
 5. 毎時自動再検証・確定違反 3 回連続で一時非表示 (修復で自動復帰) の説明
-6. プライバシー方針 (ログを残さない)
+6. プライバシー方針 (固定の設定・取得・pin 検証エラーだけをログに記録)
+7. 自動デプロイの merge 前に本番の必須 pin を設定し、USDC 継続時は任意の USDC pin も設定する。
+   受取先変更は OpenPay 側と env を揃えて再デプロイし、切替途中の pin 不一致は 500 を想定する。
 
 ## 12. 計画レビュー裁定 (Codex GPT-5.6 Terra xhigh, 2026-07-15)
 
@@ -233,7 +251,8 @@ http アダプタの timeout (`AbortSignal.timeout`) と `cache: 'no-store'` / d
 出典: ユーザー仕様 + cipherwebllc/openpay 実ソース裏取り (lib/x402/dualRailRelay.ts /
 vanillaGate.ts / packages/x402-sdk/src/dualGate.mjs = 未公開 0.6.0 の参照実装)。
 ゴール: 402 に JPYC+USDC 並記 + `PAYMENT-REQUIRED` ヘッダ、USDC は OpenPay リレー経由で
-verify→upstream→settle の正順維持、USDC 面障害時は JPYC のみで継続、**JPYC 経路は不変更**。
+verify→upstream→settle の正順維持、USDC 面の可用性障害時は JPYC のみで継続。
+2026-09-23 追記: pin/決済条件の不一致は両レールを停止する (§15)。
 
 ### リレー契約 (ソース確認済み・本番 https://open-pay.jp)
 
@@ -244,69 +263,78 @@ verify→upstream→settle の正順維持、USDC 面障害時は JPYC のみで
   非 200 (404 resource_not_found / 404 not_found / 503 relay_unconfigured / 429) は
   **すべて「USDC 面なし」= null** (throw しない・null はキャッシュしない)。
 - `POST /api/x402/relay/{verify|settle}` body:
-  `{ resourceId, paymentHeader: <X-PAYMENT 生 base64> }` または
-  `{ resourceId, paymentSignatureHeader: <PAYMENT-SIGNATURE 生値> }`。
+  `{ resourceId, paymentRequirements: <検証済み v1Accepts>, paymentHeader: <X-PAYMENT 生 base64> }` または
+  `{ resourceId, paymentRequirements: <検証済み v1Accepts>, paymentSignatureHeader: <PAYMENT-SIGNATURE 生値> }`。
+  409 は決済条件変更: キャッシュ破棄、その場で再取得・pin 検証、
+  新しい USDC 条件と PAYMENT-REQUIRED を含む 402 requirements_mismatch。元の支払いは再送しない。
+  再取得不能・pin 不一致なら既存の 500 wrapper で停止する。
   200 = facilitator 判定素通し (verify: `{isValid, invalidReason?, payer?}` /
   settle: `{success, transaction?, network?, payer?, errorReason?}`)。
   400 invalid_payment_payload・503 facilitator_unavailable (判定なし=課金なし)。
   **`isValid===true` / `success===true` 以外は解錠しない (fail-closed)**。
 
-### gate.ts (追加のみ・既存関数 acceptsFor/verifyPayment/settlePayment/callFacilitator は不変更)
+### gate.ts (seller pin 対応後の契約)
 
 - `UsdcFace` 型: `{ resourceId: string; v1Accepts: PaymentRequirements;
-  paymentRequiredHeader?: string; [k: string]: unknown }` (open record)。
-- `usdcFace(): Promise<UsdcFace | null>` — `MY_RESOURCE_ID` 未設定なら即 null (段階ロールアウト)。
-  requirements を 5 分キャッシュ。非 200 / JSON 不正 / v1Accepts 欠落 / fetch 例外 → null
-  (キャッシュせず、復旧したら次リクエストで拾う)。
+  v2Accept: PaymentRequirements; paymentRequiredHeader: string; [k: string]: unknown }` (open record)。
+- `usdcFace(): Promise<UsdcFace | null>` — 必須 pin を検査。EXPECTED_USDC_RECIPIENT が未設定・空なら
+  cache を使わず fetch もせず null。設定時は検証済み requirements のみ 5 分キャッシュ。
+  非 2xx / JSON 読み取り失敗 / fetch 例外 → null (非キャッシュ)。
+  取得できた値の ID・全受取先・決済条件の不一致や欠落 → throw、両レールを停止 (§15)。
 - `json402(accepts, error, paymentRequiredHeader?)` — 第 3 引数があれば `PAYMENT-REQUIRED`
   ヘッダ付与。既存呼び出しは無変更で動く。
-- `relayPayment(path: 'verify'|'settle', headers: {paymentHeader?; paymentSignatureHeader?})`
-  — 上記 POST、`r.json()` を返す (fetch/JSON 例外は投げっぱなし = route が 500 に変換)。
+- `relayPayment(path: 'verify'|'settle', headers: {paymentHeader?; paymentSignatureHeader?}, face: UsdcFace, jpycAccepts)`
+  — 上記 POST、通常は `r.json()`、409 は再検証済みの 402 Response を返す。
+  USDC pin 未設定なら送信を拒否。fetch/JSON/再検証の例外は route が 500 に変換。
 - `resetUsdcFaceCache()` (テスト用)。
 
 ### route.ts の処理順 (JPYC 経路のコードパスは既存のまま)
 
 1. `accepts = acceptsFor(request.url)` — 失敗は従来どおり 500 (USDC 面があっても 500。
-   参照実装は USDC-only 継続だが、bootstrap 500 の意味論維持を優先 — ユーザー仕様どおり)
-2. `usdc = await usdcFace()` (null 許容)
+   このゲートでは JPYC 出品取得・pin 検証を必須とする)
+2. `usdc = await usdcFace()` (USDC 無効・可用性障害の null は許容、pin 検証失敗は 500 accepts_unavailable)
 3. `allAccepts = usdc ? [...accepts, usdc.v1Accepts] : accepts` — **accepts[0] は常に JPYC**
-4. 以後の 402 はすべて `json402(allAccepts, error, usdc?.paymentRequiredHeader)`
+4. 通常の 402 は `json402(allAccepts, error, usdc?.paymentRequiredHeader)`。
+   relay 409 では JPYC snapshot + 再取得した USDC 面で 402 を返す。
 5. 支払いヘッダ (X-PAYMENT / PAYMENT-SIGNATURE) が両方無い → 402 (掲載プローブ互換)
 6. q なし/空 → 400 (支払い処理前・未課金)
-7. レール判定 (参照実装 dualGate.mjs と同一):
-   - `PAYMENT-SIGNATURE` あり → USDC v2 レール (生値を relay へ)
+7. レール判定:
+   - USDC 面あり、`PAYMENT-SIGNATURE` あり → USDC v2 レール (生値を relay へ)
    - `X-PAYMENT` の decode 失敗 → 402 invalid_payment_payload (従来どおり・allAccepts で)
    - decode 成功で `payload.network === usdc.v1Accepts.network` ('base') → USDC v1 レール
      (**生の base64 文字列**を relay へ)
-   - それ以外 → 既存 JPYC 処理そのまま。`usdc === null` なら常に JPYC
+   - USDC 面なしの場合、PAYMENT-SIGNATURE または Base/Base Sepolia network の支払いは
+     402 payment_invalid。relay/facilitator/上流を呼ばない。その他は既存 JPYC 処理。
 8. USDC レール: relay verify (`isValid!==true` → 402 invalidReason) → アダプタ実行+
    直列化確定 (失敗 502・settle しない) → relay settle (`success!==true` → 402 errorReason)
    → 200 + 確定済み body + `X-PAYMENT-RESPONSE: base64(JSON(settlement))`。
-   relay fetch 例外は既存と同じ 500 (payment_verification_failed / payment_settlement_failed)
+   relay 409 の 402 Response はそのまま返し、支払いも上流処理も自動再実行しない。
+   relay fetch・再取得・再検証の例外は既存と同じ 500 (payment_verification_failed / payment_settlement_failed)
 9. USDC accepts の金銭フィールド (payTo/amount/asset/resource) は**手で組まず返り値をそのまま**
    (参照実装も v1Accepts を無加工で並記。買い手スモークは resource 照合をしない)
 
 ### env / README
 
-- `.env.example` に `MY_RESOURCE_ID=` (OpenPay 出品一覧の dual-rail スニペットに表示される ID。
-  空なら JPYC のみ)。
+- `.env.example` の `MY_RESOURCE_ID`・`EXPECTED_RECIPIENT` は必須。
+  `EXPECTED_USDC_RECIPIENT` は任意で、未設定・空なら USDC を取得・提示・受付しない。
 - README「USDC (Base) 併売と x402 Bazaar 掲載」節: OpenPay 側 USDC 面有効化が前提 /
-  `MY_RESOURCE_ID` 設定 / **最初の USDC 実購入 1 件が settle された時点で Bazaar 掲載確定** /
+  `MY_RESOURCE_ID` と `EXPECTED_USDC_RECIPIENT` の照合 / **最初の USDC 実購入 1 件が settle された時点で Bazaar 掲載確定** /
   USDC 売上は出品者アドレス直接着金 (OpenPay の USDC 側手数料 0%)。
 
 ### テスト追加 (fetch モック)
 
-未払い 402 = [JPYC, USDC] 順 + PAYMENT-REQUIRED / MY_RESOURCE_ID 未設定 = 従来 1 件・リレー
-未呼出 / requirements 404・例外 = JPYC のみに degrade / PAYMENT-SIGNATURE → relay verify→
+USDC 有効時の未払い 402 = [JPYC, USDC] 順 + PAYMENT-REQUIRED / 必須 pin 未設定 = 起動失敗・fetch 未呼出 /
+USDC pin 未設定 = JPYC のみ・USDC fetch/支払い未実行 /
+requirements 404・例外 = JPYC のみに degrade / PAYMENT-SIGNATURE → relay verify→
 adapter→relay settle 順で 200 + X-PAYMENT-RESPONSE・JPYC facilitator 未呼出 / X-PAYMENT
-network='base' → USDC・'eip155:137' → JPYC (既存テスト無変更で通ること) / relay verify NG →
+network='base' → USDC・'eip155:137' → JPYC (必須 pin を fixture に設定) / relay verify NG →
 402+invalidReason・adapter 未実行 / adapter 失敗 → 502・settle 未呼出 / relay settle NG →
 402+errorReason / requirements キャッシュ 5 分 (null は非キャッシュ)。
 
 ### やってはいけない
 
-JPYC 経路 (accepts[0]・callFacilitator・verify→adapter→settle 順) の変更 / 判定 body 以外を
-根拠に解錠 / USDC 面の失敗で JPYC を止める / 金銭フィールドの手組み。
+JPYC 経路の処理順 (accepts[0]・verify→adapter→settle) の変更 / 判定 body 以外を
+根拠に解錠 / USDC 面の可用性障害で JPYC を止める / pin 不一致を握りつぶす / 金銭フィールドの手組み。
 
 ## 14. 既存スキャフォールド
 
@@ -314,3 +342,38 @@ JPYC 経路 (accepts[0]・callFacilitator・verify→adapter→settle 順) の�
 - package.json / tsconfig.json (スクリプト・paths 設定済み、依存は未インストール)
 - lib/gate.ts (§4 をほぼ実装済み)
 - lib/adapters/types.ts, lib/adapters/http.ts
+
+## 15. Seller pin — B12 P0 対応 (2026-09-23)
+
+参照: OpenPay PR #567、openpay-x402-sdk 0.10.0 の sellerPins.mjs / gate.mjs / dualGate.mjs、
+lib/x402/paywallSnippet.ts、app/api/discovery/[id]/route.ts。
+
+- 同じ URL の攻撃者出品が newest-first の先頭に来る問題を防ぐため、ID 指定取得のみを使う。
+  応答の ID と MY_RESOURCE_URL を完全一致で照合する。URL 一致検索へのフォールバックは禁止。
+- Next.js instrumentation.register で起動時に必須設定を検査。要求ごとにも cache 利用前に検査する。
+  ID の前後の空白・不正な受取先・ゼロ/既知の burn アドレスを拒否し、設定エラーはまとめて報告。
+  EXPECTED_USDC_RECIPIENT は任意。未設定・空なら USDC は取得・提示・受付しない。
+- JPYC: 全 accepts の extra.openpay.merchant を EXPECTED_RECIPIENT と照合し、
+  mode=forwarder-split・有効な forwarder アドレス・payTo=forwarder を検証する。
+- USDC: 設定時のみ resourceId・v1Accepts・v2Accept・PAYMENT-REQUIRED 内の全 accepts の受取先を検証。
+  PAYMENT-REQUIRED は買い手ヘッダと共通の厳密な base64/JSON デコーダで検査する。
+  base / base-sepolia と eip155:8453 / eip155:84532 の対応、asset・scheme・amount の整合性も検証する。
+  アドレス比較は大文字小文字を区別しない。検証失敗は固定の理由をログに残して停止する。
+- 検証前に 402 を返さず、キャッシュせず、verify / settle / 上流処理を行わない。
+  5 分キャッシュは維持し、pin を再検証して使う。verify / settle 直前にも受取先を照合する。
+- USDC relay にはそのリクエストの検証済み v1Accepts を送信し、別リクエストの cache 更新で
+  決済条件を差し替えない。409 は cache を破棄して即再取得・再検証し、
+  新条件の 402 requirements_mismatch を返す。再取得/再検証失敗時だけ 500。自動再送しない。
+- テスト: 同一 URL の別出品、ID/URL/recipient/forwarder 不一致、未設定/不正 pin、
+  404 対 5xx・不正 JSON のログ、USDC の全表現/不正 base64、cache の拒否・有効期限・pin 変更、
+  USDC 無効時の受付拒否、relay 409 の新条件・再検証・再送なし、M5 (facilitator 直前)・M8 (merchant 欠落)。
+
+
+### 受容した制限 (レビュー nit 13)
+
+JPYC の `merchantValue` / `feeValue` / `feeReceiver` / `asset` / `network` は、SDK 0.10.0 と同様、
+このゲートで独立した設定値との固定照合を行わない。価格・手数料・通貨/チェーンの値は OpenPay の
+掲載情報に依存する。B12 の「同じ URL に別の受取先を登録する」攻撃は出品 ID と merchant pin で
+防ぐが、OpenPay 自体が侵害された場合のこれらのフィールドの改変までは防がない。
+この範囲は今回の修正対象外として受容する。forwarder の形式・mode・payTo との整合性、および
+USDC の各表現間の network/asset/scheme/amount の整合性の検査は引き続き行う。
