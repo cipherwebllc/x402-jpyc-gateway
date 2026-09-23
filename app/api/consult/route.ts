@@ -10,6 +10,7 @@ import {
   verifyPayment,
   type PaymentRequirements,
   type SettleResult,
+  type UsdcFace,
   type VerifyResult,
 } from '@/lib/gate';
 
@@ -36,13 +37,14 @@ function paymentError(
 
 export async function GET(request: Request): Promise<Response> {
   let accepts: PaymentRequirements[];
+  let usdc: UsdcFace | null;
   try {
     accepts = await acceptsFor(request.url);
+    usdc = await usdcFace();
   } catch {
     return jsonError(500, 'accepts_unavailable');
   }
 
-  const usdc = await usdcFace();
   const allAccepts = usdc ? [...accepts, usdc.v1Accepts] : accepts;
   const paymentHeader = request.headers.get('X-PAYMENT');
   const paymentSignatureHeader = request.headers.get('PAYMENT-SIGNATURE');
@@ -54,6 +56,9 @@ export async function GET(request: Request): Promise<Response> {
   if (!q) {
     return jsonError(400, 'q_required');
   }
+  if (!usdc && paymentSignatureHeader !== null) {
+    return paymentError(accepts, 'payment_invalid');
+  }
 
   let paymentPayload: unknown;
   let isUsdcRail = usdc !== null && paymentSignatureHeader !== null;
@@ -62,6 +67,12 @@ export async function GET(request: Request): Promise<Response> {
     if (paymentPayload === undefined) {
       return paymentError(allAccepts, 'invalid_payment_payload', usdc?.paymentRequiredHeader);
     }
+    const network = typeof paymentPayload === 'object' && paymentPayload !== null
+      ? (paymentPayload as { network?: unknown }).network : undefined;
+    if (!usdc && typeof network === 'string' &&
+        ['base', 'base-sepolia', 'eip155:8453', 'eip155:84532'].includes(network)) {
+      return paymentError(accepts, 'payment_invalid');
+    }
     isUsdcRail =
       usdc !== null &&
       typeof paymentPayload === 'object' &&
@@ -69,18 +80,19 @@ export async function GET(request: Request): Promise<Response> {
       (paymentPayload as { network?: unknown }).network === usdc.v1Accepts.network;
   }
 
-  if (isUsdcRail) {
+  if (isUsdcRail && usdc) {
     const relayHeaders =
       paymentSignatureHeader !== null
         ? { paymentSignatureHeader }
         : { paymentHeader: paymentHeader! };
 
-    let verification: VerifyResult;
+    let verification: VerifyResult | Response;
     try {
-      verification = (await relayPayment('verify', relayHeaders)) as VerifyResult;
+      verification = await relayPayment('verify', relayHeaders, usdc, accepts);
     } catch {
       return jsonError(500, 'payment_verification_failed');
     }
+    if (verification instanceof Response) return verification;
     if (verification?.isValid !== true) {
       return paymentError(
         allAccepts,
@@ -99,12 +111,13 @@ export async function GET(request: Request): Promise<Response> {
       return jsonError(502, 'upstream_error');
     }
 
-    let settlement: SettleResult;
+    let settlement: SettleResult | Response;
     try {
-      settlement = (await relayPayment('settle', relayHeaders)) as SettleResult;
+      settlement = await relayPayment('settle', relayHeaders, usdc, accepts);
     } catch {
       return jsonError(500, 'payment_settlement_failed');
     }
+    if (settlement instanceof Response) return settlement;
     if (settlement?.success !== true) {
       return paymentError(
         allAccepts,
