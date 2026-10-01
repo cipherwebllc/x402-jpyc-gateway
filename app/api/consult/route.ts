@@ -36,19 +36,22 @@ function paymentError(
 }
 
 export async function GET(request: Request): Promise<Response> {
+  const paymentHeader = request.headers.get('X-PAYMENT');
+  const paymentSignatureHeader = request.headers.get('PAYMENT-SIGNATURE');
+  // 402 ゲートと掲載値の鮮度 (5 分 / 30 分) は必ずこの 1 変数から決める。
+  const hasPayment = Boolean(paymentHeader) || paymentSignatureHeader !== null;
+
   let accepts: PaymentRequirements[];
   let usdc: UsdcFace | null;
   try {
-    accepts = await acceptsFor(request.url);
-    usdc = await usdcFace();
+    accepts = await acceptsFor(request.url, { forPayment: hasPayment });
+    usdc = await usdcFace({ forPayment: hasPayment });
   } catch {
     return jsonError(500, 'accepts_unavailable');
   }
 
   const allAccepts = usdc ? [...accepts, usdc.v1Accepts] : accepts;
-  const paymentHeader = request.headers.get('X-PAYMENT');
-  const paymentSignatureHeader = request.headers.get('PAYMENT-SIGNATURE');
-  if (!paymentHeader && paymentSignatureHeader === null) {
+  if (!hasPayment) {
     return paymentError(allAccepts, 'payment_required', usdc?.paymentRequiredHeader);
   }
 

@@ -174,6 +174,379 @@ describe('pinned discovery', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  describe('unpaid (probe) cache tier', () => {
+    const T0 = 1_000_000;
+    const MIN = 60_000;
+    const listingFetch = () => vi.fn().mockImplementation(async () => response(listing));
+
+    it('reuses a validated listing for unpaid requests until 30 minutes and refetches at 30 minutes', async () => {
+      const now = vi.spyOn(Date, 'now').mockReturnValue(T0);
+      const fetchMock = listingFetch();
+      vi.stubGlobal('fetch', fetchMock);
+      await acceptsFor(resource, { forPayment: false });
+      now.mockReturnValue(T0 + 30 * MIN - 1);
+      await acceptsFor(resource, { forPayment: false });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      now.mockReturnValue(T0 + 30 * MIN);
+      await acceptsFor(resource, { forPayment: false });
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not extend the listing age on unpaid hits, so a later payment still refetches', async () => {
+      const now = vi.spyOn(Date, 'now').mockReturnValue(T0);
+      const fetchMock = listingFetch();
+      vi.stubGlobal('fetch', fetchMock);
+      await acceptsFor(resource, { forPayment: false });
+      now.mockReturnValue(T0 + 29 * MIN);
+      await acceptsFor(resource, { forPayment: false });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      await acceptsFor(resource, { forPayment: true });
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
+    it('treats omitted options as a payment (5-minute tier)', async () => {
+      const now = vi.spyOn(Date, 'now').mockReturnValue(T0);
+      const fetchMock = listingFetch();
+      vi.stubGlobal('fetch', fetchMock);
+      await acceptsFor(resource, { forPayment: false });
+      now.mockReturnValue(T0 + 5 * MIN);
+      await acceptsFor(resource);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
+    it('revalidates the seller pins on every unpaid cache hit', async () => {
+      const now = vi.spyOn(Date, 'now').mockReturnValue(T0);
+      const fetchMock = listingFetch();
+      vi.stubGlobal('fetch', fetchMock);
+      await acceptsFor(resource, { forPayment: false });
+      now.mockReturnValue(T0 + 10 * MIN);
+      vi.stubEnv('EXPECTED_RECIPIENT', attacker);
+      await expect(acceptsFor(resource, { forPayment: false })).rejects.toThrow('JPYC recipient mismatch');
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not cache a listing that fails validation', async () => {
+      const poisoned = {
+        ...listing,
+        accepts: [{ ...catalogAccept, extra: { openpay: { ...catalogAccept.extra.openpay, merchant: attacker } } }],
+      };
+      const bodies: unknown[] = [poisoned, listing, listing];
+      const fetchMock = vi.fn().mockImplementation(async () => response(bodies.shift()));
+      vi.stubGlobal('fetch', fetchMock);
+      await expect(acceptsFor(resource, { forPayment: false })).rejects.toThrow('JPYC recipient mismatch');
+      await expect(acceptsFor(resource, { forPayment: false })).resolves.toEqual([catalogAccept]);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      await acceptsFor(resource, { forPayment: false });
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('concurrent discovery fetches', () => {
+    const T0 = 1_000_000;
+    const MIN = 60_000;
+    const repriced = {
+      ...listing,
+      accepts: [{ ...catalogAccept, maxAmountRequired: '2010000000000000000' }],
+    };
+
+    function deferredFetch() {
+      const pending: Array<(res: Response) => void> = [];
+      const fetchMock = vi.fn(() => new Promise<Response>((resolve) => pending.push(resolve)));
+      vi.stubGlobal('fetch', fetchMock);
+      return { fetchMock, pending };
+    }
+
+    it('does not let an older success reinstall a listing that a newer fetch found deleted (404)', async () => {
+      const { fetchMock, pending } = deferredFetch();
+      const older = acceptsFor(resource, { forPayment: false });
+      const newer = acceptsFor(resource, { forPayment: false });
+      expect(pending).toHaveLength(2);
+
+      pending[1](response({ error: 'not_found' }, 404));
+      await expect(newer).rejects.toThrow('HTTP 404');
+      pending[0](response(listing));
+      await expect(older).rejects.toThrow('superseded');
+
+      const next = acceptsFor(resource, { forPayment: false });
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+      pending[2](response(listing));
+      await expect(next).resolves.toEqual([catalogAccept]);
+    });
+
+    it('does not let an older 404 erase a listing that a newer fetch already cached', async () => {
+      const { fetchMock, pending } = deferredFetch();
+      const older = acceptsFor(resource, { forPayment: false });
+      const newer = acceptsFor(resource, { forPayment: false });
+
+      pending[1](response(listing));
+      await expect(newer).resolves.toEqual([catalogAccept]);
+      pending[0](response({ error: 'not_found' }, 404));
+      await expect(older).rejects.toThrow('HTTP 404');
+
+      await expect(acceptsFor(resource, { forPayment: false })).resolves.toEqual([catalogAccept]);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not let a slow older response overwrite newer terms', async () => {
+      const { fetchMock, pending } = deferredFetch();
+      const older = acceptsFor(resource);
+      const newer = acceptsFor(resource);
+
+      pending[1](response(repriced));
+      await expect(newer).resolves.toEqual(repriced.accepts);
+      pending[0](response(listing));
+      await expect(older).resolves.toEqual(repriced.accepts);
+
+      await expect(acceptsFor(resource)).resolves.toEqual(repriced.accepts);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
+    it('refuses a poisoned older listing even when a newer valid listing is already cached', async () => {
+      const { pending } = deferredFetch();
+      const older = acceptsFor(resource);
+      const newer = acceptsFor(resource);
+      pending[1](response(listing));
+      await expect(newer).resolves.toEqual([catalogAccept]);
+      pending[0](response({
+        ...listing,
+        accepts: [{ ...catalogAccept, extra: { openpay: { ...catalogAccept.extra.openpay, merchant: attacker } } }],
+      }));
+      await expect(older).rejects.toThrow('JPYC recipient mismatch');
+    });
+
+    it('measures the listing age from the start of the fetch', async () => {
+      const now = vi.spyOn(Date, 'now').mockReturnValue(T0);
+      const { fetchMock, pending } = deferredFetch();
+      const first = acceptsFor(resource);
+      now.mockReturnValue(T0 + 4 * MIN);
+      pending[0](response(listing));
+      await first;
+
+      now.mockReturnValue(T0 + 5 * MIN);
+      const paid = acceptsFor(resource);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      pending[1](response(listing));
+      await paid;
+    });
+
+    it('rejects and does not cache a response that arrives after the payment age limit', async () => {
+      const now = vi.spyOn(Date, 'now').mockReturnValue(T0);
+      const { fetchMock, pending } = deferredFetch();
+      const slow = acceptsFor(resource);
+      now.mockReturnValue(T0 + 5 * MIN);
+      pending[0](response(listing));
+      await expect(slow).rejects.toThrow('too old');
+
+      const probe = acceptsFor(resource, { forPayment: false });
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      pending[1](response(listing));
+      await expect(probe).resolves.toEqual([catalogAccept]);
+    });
+  });
+
+  describe('USDC face cache tiers', () => {
+    const T0 = 1_000_000;
+    const MIN = 60_000;
+    const faceFetch = () => vi.fn().mockImplementation(async () => response(validUsdcFace));
+    const poisonedFace = {
+      ...validUsdcFace,
+      v1Accepts: { ...validUsdcFace.v1Accepts, payTo: attacker },
+    };
+
+    function deferredFetch() {
+      const pending: Array<(res: Response) => void> = [];
+      const fetchMock = vi.fn(() => new Promise<Response>((resolve) => pending.push(resolve)));
+      vi.stubGlobal('fetch', fetchMock);
+      return { fetchMock, pending };
+    }
+
+    it('reuses the face for unpaid requests until 30 minutes and refetches at 30 minutes', async () => {
+      const now = vi.spyOn(Date, 'now').mockReturnValue(T0);
+      const fetchMock = faceFetch();
+      vi.stubGlobal('fetch', fetchMock);
+      await usdcFace({ forPayment: false });
+      now.mockReturnValue(T0 + 30 * MIN - 1);
+      await usdcFace({ forPayment: false });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      now.mockReturnValue(T0 + 30 * MIN);
+      await usdcFace({ forPayment: false });
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not extend the face age on unpaid hits, so a later payment still refetches', async () => {
+      const now = vi.spyOn(Date, 'now').mockReturnValue(T0);
+      const fetchMock = faceFetch();
+      vi.stubGlobal('fetch', fetchMock);
+      await usdcFace({ forPayment: false });
+      now.mockReturnValue(T0 + 29 * MIN);
+      await usdcFace({ forPayment: false });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      await usdcFace({ forPayment: true });
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
+    it('treats omitted options as a payment (5-minute tier)', async () => {
+      const now = vi.spyOn(Date, 'now').mockReturnValue(T0);
+      const fetchMock = faceFetch();
+      vi.stubGlobal('fetch', fetchMock);
+      await usdcFace({ forPayment: false });
+      now.mockReturnValue(T0 + 5 * MIN - 1);
+      await usdcFace();
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      now.mockReturnValue(T0 + 5 * MIN);
+      await usdcFace();
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not cache an unavailable or invalid face', async () => {
+      const bodies: Array<[unknown, number]> = [[{ error: 'relay_unconfigured' }, 503], [poisonedFace, 200], [validUsdcFace, 200]];
+      const fetchMock = vi.fn().mockImplementation(async () => response(...bodies.shift()!));
+      vi.stubGlobal('fetch', fetchMock);
+      await expect(usdcFace({ forPayment: false })).resolves.toBeNull();
+      await expect(usdcFace({ forPayment: false })).rejects.toThrow('USDC recipient mismatch');
+      await expect(usdcFace({ forPayment: false })).resolves.toEqual(validUsdcFace);
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+    });
+
+    it('does not let an older success reinstall a face that a newer fetch found gone (404)', async () => {
+      const { fetchMock, pending } = deferredFetch();
+      const older = usdcFace({ forPayment: false });
+      const newer = usdcFace({ forPayment: false });
+      expect(pending).toHaveLength(2);
+
+      pending[1](response({ error: 'resource_not_found' }, 404));
+      await expect(newer).resolves.toBeNull();
+      pending[0](response(validUsdcFace));
+      await expect(older).resolves.toBeNull();
+
+      const next = usdcFace({ forPayment: false });
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+      pending[2](response({ error: 'resource_not_found' }, 404));
+      await expect(next).resolves.toBeNull();
+    });
+
+    it('does not let an older 404 erase a face that a newer fetch already cached', async () => {
+      const { fetchMock, pending } = deferredFetch();
+      const older = usdcFace({ forPayment: false });
+      const newer = usdcFace({ forPayment: false });
+
+      pending[1](response(validUsdcFace));
+      await expect(newer).resolves.toEqual(validUsdcFace);
+      pending[0](response({ error: 'resource_not_found' }, 404));
+      await expect(older).resolves.toBeNull();
+
+      await expect(usdcFace({ forPayment: false })).resolves.toEqual(validUsdcFace);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not let a slow older response overwrite newer terms', async () => {
+      const repriced = {
+        ...validUsdcFace,
+        v1Accepts: { ...validUsdcFace.v1Accepts, maxAmountRequired: '2000000' },
+        v2Accept: { ...validUsdcFace.v2Accept, amount: '2000000' },
+        paymentRequiredHeader: Buffer.from(JSON.stringify({
+          x402Version: 2, resource: { url: resource }, accepts: [{ ...v2Accept, amount: '2000000' }],
+        })).toString('base64'),
+      };
+      const { fetchMock, pending } = deferredFetch();
+      const older = usdcFace();
+      const newer = usdcFace();
+
+      pending[1](response(repriced));
+      await expect(newer).resolves.toEqual(repriced);
+      pending[0](response(validUsdcFace));
+      await expect(older).resolves.toEqual(repriced);
+
+      await expect(usdcFace()).resolves.toEqual(repriced);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
+    it('measures the face age from the start of the fetch', async () => {
+      const now = vi.spyOn(Date, 'now').mockReturnValue(T0);
+      const { fetchMock, pending } = deferredFetch();
+      const first = usdcFace();
+      now.mockReturnValue(T0 + 4 * MIN);
+      pending[0](response(validUsdcFace));
+      await first;
+
+      now.mockReturnValue(T0 + 5 * MIN);
+      const paid = usdcFace();
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      pending[1](response(validUsdcFace));
+      await paid;
+    });
+
+    it('returns null and does not cache a face that arrives after the payment age limit', async () => {
+      const now = vi.spyOn(Date, 'now').mockReturnValue(T0);
+      const { fetchMock, pending } = deferredFetch();
+      const slow = usdcFace();
+      now.mockReturnValue(T0 + 5 * MIN);
+      pending[0](response(validUsdcFace));
+      await expect(slow).resolves.toBeNull();
+
+      const probe = usdcFace({ forPayment: false });
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      pending[1](response(validUsdcFace));
+      await expect(probe).resolves.toEqual(validUsdcFace);
+    });
+
+    it('lets an older 404 clear the face when the newer fetch ends without a definitive answer (503)', async () => {
+      const now = vi.spyOn(Date, 'now').mockReturnValue(T0);
+      const { fetchMock, pending } = deferredFetch();
+      const seed = usdcFace({ forPayment: false });
+      pending[0](response(validUsdcFace));
+      await seed;
+
+      now.mockReturnValue(T0 + 10 * MIN);
+      const older = usdcFace();
+      const newer = usdcFace();
+      pending[2](response({ error: 'relay_unconfigured' }, 503));
+      await expect(newer).resolves.toBeNull();
+      pending[1](response({ error: 'resource_not_found' }, 404));
+      await expect(older).resolves.toBeNull();
+
+      const probe = usdcFace({ forPayment: false });
+      expect(fetchMock).toHaveBeenCalledTimes(4);
+      pending[3](response({ error: 'resource_not_found' }, 404));
+      await expect(probe).resolves.toBeNull();
+    });
+
+    it('refuses a poisoned older response even when a newer valid face is already cached', async () => {
+      const { pending } = deferredFetch();
+      const older = usdcFace();
+      const newer = usdcFace();
+      pending[1](response(validUsdcFace));
+      await expect(newer).resolves.toEqual(validUsdcFace);
+      pending[0](response(poisonedFace));
+      await expect(older).rejects.toThrow('USDC recipient mismatch');
+    });
+
+    it('still refuses a poisoned face that arrives after the age limit', async () => {
+      const now = vi.spyOn(Date, 'now').mockReturnValue(T0);
+      const { pending } = deferredFetch();
+      const slow = usdcFace();
+      now.mockReturnValue(T0 + 5 * MIN);
+      pending[0](response(poisonedFace));
+      await expect(slow).rejects.toThrow('USDC recipient mismatch');
+    });
+
+    it('invalidates in-flight fetches on reset, as the relay 409 path does', async () => {
+      const { fetchMock, pending } = deferredFetch();
+      const inFlight = usdcFace({ forPayment: false });
+      resetUsdcFaceCache();
+      const refetch = usdcFace({ forPayment: true });
+      pending[1](response({ error: 'relay_unconfigured' }, 503));
+      await expect(refetch).resolves.toBeNull();
+      pending[0](response(validUsdcFace));
+      await expect(inFlight).resolves.toBeNull();
+
+      const probe = usdcFace({ forPayment: false });
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+      pending[2](response(validUsdcFace));
+      await expect(probe).resolves.toEqual(validUsdcFace);
+    });
+  });
+
   it('cannot reuse cached requirements after the configured recipient changes', async () => {
     const fetchMock = vi.fn().mockResolvedValue(response(listing));
     vi.stubGlobal('fetch', fetchMock);

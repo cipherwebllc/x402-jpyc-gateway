@@ -12,10 +12,15 @@ import {
   validateJpycRequirements,
   validateUsdcFace,
   type CatalogItem,
+  type SellerConfig,
 } from './sellerPins';
 export { decodePaymentHeader } from './paymentHeader';
 
 const OPENPAY = 'https://open-pay.jp';
+// discovery と relay/requirements は OpenPay 側の KV を消費するため、402 を返すだけの
+// 支払いなしリクエストは長く使う。
+const PAYMENT_LISTING_TTL_MS = 5 * 60_000;
+const PROBE_LISTING_TTL_MS = 30 * 60_000;
 
 export type PaymentRequirements = {
   resource?: string;
@@ -44,38 +49,63 @@ export type UsdcFace = {
 
 let acceptsCache: CatalogItem | null = null;
 let acceptsCachedAt = 0;
+// 並行する discovery 取得は「後から開始した取得」の結果だけを反映する (完了順は問わない)。
+let listingFetchSeq = 0;
+let listingAppliedSeq = 0;
 let usdcFaceCache: UsdcFace | null = null;
 let usdcFaceCachedAt = 0;
+let usdcFetchSeq = 0;
+let usdcAppliedSeq = 0;
 
 export function resetAcceptsCache(): void {
   acceptsCache = null;
   acceptsCachedAt = 0;
+  listingAppliedSeq = listingFetchSeq;
 }
 
 export function resetUsdcFaceCache(): void {
   usdcFaceCache = null;
   usdcFaceCachedAt = 0;
+  usdcAppliedSeq = usdcFetchSeq;
 }
 
-export async function usdcFace(): Promise<UsdcFace | null> {
+function cachedUsdcFace(resourceId: string, maxAgeMs: number, config: SellerConfig): UsdcFace | null {
+  if (usdcFaceCache?.resourceId !== resourceId || Date.now() - usdcFaceCachedAt >= maxAgeMs) {
+    return null;
+  }
+  validateUsdcFace(usdcFaceCache, config);
+  return structuredClone(usdcFaceCache);
+}
+
+// forPayment を省略したときは支払い扱い (厳しい側の 5 分) にする。
+export async function usdcFace(options: { forPayment?: boolean } = {}): Promise<UsdcFace | null> {
   const config = sellerConfig();
   if (!config.expectedUsdcRecipient) return null;
   const { resourceId } = config;
-  if (
-    usdcFaceCache &&
-    usdcFaceCache.resourceId === resourceId &&
-    Date.now() - usdcFaceCachedAt < 5 * 60_000
-  ) {
-    validateUsdcFace(usdcFaceCache, config);
-    return structuredClone(usdcFaceCache);
-  }
+  const maxAgeMs = options.forPayment === false ? PROBE_LISTING_TTL_MS : PAYMENT_LISTING_TTL_MS;
+  // ヒットで usdcFaceCachedAt を更新してはならない。USDC の verify / settle はこの値を使う。
+  const cached = cachedUsdcFace(resourceId, maxAgeMs, config);
+  if (cached) return cached;
 
+  const seq = ++usdcFetchSeq;
+  const startedAt = Date.now();
   let value: unknown;
   try {
     const res = await fetch(
       OPENPAY + '/api/x402/relay/requirements?resourceId=' + encodeURIComponent(resourceId),
       { cache: 'no-store' },
     );
+    if (res.status === 404) {
+      // USDC 面の無効化 / リレー停止の確定シグナル。止めた USDC 面をキャッシュから出し続けない。
+      if (seq > usdcAppliedSeq) {
+        usdcAppliedSeq = seq;
+        if (usdcFaceCache?.resourceId === resourceId) {
+          usdcFaceCache = null;
+          usdcFaceCachedAt = 0;
+        }
+      }
+      return null;
+    }
     if (!res.ok) return null;
     value = await res.json();
   } catch {
@@ -83,17 +113,26 @@ export async function usdcFace(): Promise<UsdcFace | null> {
   }
   // Trust failures must stop both rails, outside the availability fallback above.
   validateUsdcFace(value, config);
-  usdcFaceCache = value;
-  usdcFaceCachedAt = Date.now();
-  return structuredClone(value);
+  if (Date.now() - startedAt >= maxAgeMs) return null;
+  if (seq > usdcAppliedSeq) {
+    usdcAppliedSeq = seq;
+    usdcFaceCache = value;
+    usdcFaceCachedAt = startedAt;
+    return structuredClone(value);
+  }
+  // 後から開始した取得の結果が先に反映済み。古い応答ではなくそちらに従う。
+  return cachedUsdcFace(resourceId, maxAgeMs, config);
 }
 
-async function myAccepts(): Promise<PaymentRequirements[]> {
+async function myAccepts(maxAgeMs: number): Promise<PaymentRequirements[]> {
   const config = sellerConfig();
-  if (acceptsCache?.id === config.resourceId && Date.now() - acceptsCachedAt < 5 * 60_000) {
+  // ヒットで acceptsCachedAt を更新してはならない。支払いリクエストの 5 分判定は取得時刻が基準。
+  if (acceptsCache?.id === config.resourceId && Date.now() - acceptsCachedAt < maxAgeMs) {
     validateJpycListing(acceptsCache, config);
     return acceptsCache.accepts;
   }
+  const seq = ++listingFetchSeq;
+  const startedAt = Date.now();
   let res: Response;
   try {
     res = await fetch(OPENPAY + '/api/discovery/' + encodeURIComponent(config.resourceId), {
@@ -103,6 +142,14 @@ async function myAccepts(): Promise<PaymentRequirements[]> {
     rejectSellerRequirements('OpenPay temporarily unavailable (discovery request failed)');
   }
   if (res.status === 404) {
+    // 出品が消えた確定シグナル。購入できない出品の 402 をキャッシュから出し続けない。
+    if (seq > listingAppliedSeq) {
+      listingAppliedSeq = seq;
+      if (acceptsCache?.id === config.resourceId) {
+        acceptsCache = null;
+        acceptsCachedAt = 0;
+      }
+    }
     rejectSellerRequirements('OpenPay listing not found or not public (HTTP 404)');
   }
   if (res.status >= 500) {
@@ -118,17 +165,36 @@ async function myAccepts(): Promise<PaymentRequirements[]> {
     rejectSellerRequirements('invalid discovery response');
   }
   validateJpycListing(mine, config);
-  acceptsCache = mine; // 検証済みの掲載値のみを 5 分キャッシュ
-  acceptsCachedAt = Date.now();
-  return mine.accepts;
+  // 掲載値の年齢は取得の開始時刻から数える。応答が遅れた分だけ新しく見せない。
+  if (Date.now() - startedAt >= maxAgeMs) {
+    rejectSellerRequirements('OpenPay discovery response too old');
+  }
+  if (seq > listingAppliedSeq) {
+    listingAppliedSeq = seq;
+    acceptsCache = mine; // 検証済みの掲載値のみをキャッシュ (支払いあり 5 分 / なし 30 分で使う)
+    acceptsCachedAt = startedAt;
+    return mine.accepts;
+  }
+  // 後から開始した取得の結果が先に反映済み。古い応答ではなくそちらに従う。
+  if (acceptsCache?.id === config.resourceId && Date.now() - acceptsCachedAt < maxAgeMs) {
+    validateJpycListing(acceptsCache, config);
+    return acceptsCache.accepts;
+  }
+  rejectSellerRequirements('OpenPay listing superseded by a newer discovery result');
 }
 
 // resource だけをリクエスト URL (クエリ込み) に差し替えた accepts を返す。
 // 買い手は accept.resource と自分が叩いた URL の一致を検証するため resource は
 // 差し替えが必要だが、金銭フィールド (network/asset/payTo/maxAmountRequired 等) は
 // カタログ掲載値と照合されるので絶対に触らない。
-export async function acceptsFor(requestUrl: string): Promise<PaymentRequirements[]> {
-  const accepts = await myAccepts();
+// forPayment を省略したときは支払い扱い (厳しい側の 5 分) にする。
+export async function acceptsFor(
+  requestUrl: string,
+  options: { forPayment?: boolean } = {},
+): Promise<PaymentRequirements[]> {
+  const accepts = await myAccepts(
+    options.forPayment === false ? PROBE_LISTING_TTL_MS : PAYMENT_LISTING_TTL_MS,
+  );
   const configuredResource = process.env.MY_RESOURCE_URL;
   if (!configuredResource) {
     throw new Error('MY_RESOURCE_URL is not set');
@@ -198,7 +264,7 @@ export function relayPayment(
     if (r.status === 409) {
       resetUsdcFaceCache();
       // Re-pin changed terms and ask the buyer again without replaying the payment.
-      const fresh = await usdcFace();
+      const fresh = await usdcFace({ forPayment: true });
       if (!fresh) rejectSellerRequirements('OpenPay USDC requirements unavailable');
       return json402([...jpycAccepts, fresh.v1Accepts], 'requirements_mismatch', fresh.paymentRequiredHeader);
     }

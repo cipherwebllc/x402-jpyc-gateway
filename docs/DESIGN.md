@@ -41,7 +41,7 @@ README.md                 セットアップ / env / デプロイ / 掲載手順
 土台は OpenPay 公式配布の自己完結ゲート。seller pin は SDK 0.10.0 に準拠 (§15):
 
 - `GET https://open-pay.jp/api/discovery/<MY_RESOURCE_ID>` → `{ id, resource, accepts: [...] }`
-- ID・`MY_RESOURCE_URL`・全 JPYC merchant・forwarder を照合してから 5 分キャッシュ。URL 検索は禁止
+- ID・`MY_RESOURCE_URL`・全 JPYC merchant・forwarder を照合してからキャッシュ (支払いあり 5 分・支払いなし 30 分。§16)。URL 検索は禁止
 - 必須 pin 未設定は起動時の設定エラー。404 (未掲載/非公開) と 5xx (一時障害) は異なる
   エラー・ログにする。取得・照合失敗の HTTP 応答は従来の **500 accepts_unavailable**
 - 402 応答 body: `{ x402Version: 1, accepts, error }`
@@ -277,16 +277,17 @@ verify→upstream→settle の正順維持、USDC 面の可用性障害時は JP
 
 - `UsdcFace` 型: `{ resourceId: string; v1Accepts: PaymentRequirements;
   v2Accept: PaymentRequirements; paymentRequiredHeader: string; [k: string]: unknown }` (open record)。
-- `usdcFace(): Promise<UsdcFace | null>` — 必須 pin を検査。EXPECTED_USDC_RECIPIENT が未設定・空なら
-  cache を使わず fetch もせず null。設定時は検証済み requirements のみ 5 分キャッシュ。
-  非 2xx / JSON 読み取り失敗 / fetch 例外 → null (非キャッシュ)。
+- `usdcFace(options?: { forPayment?: boolean }): Promise<UsdcFace | null>` — 必須 pin を検査。EXPECTED_USDC_RECIPIENT が未設定・空なら
+  cache を使わず fetch もせず null。設定時は検証済み requirements のみキャッシュ (支払いあり 5 分・支払いなし 30 分。§16 訂正)。
+  非 2xx / JSON 読み取り失敗 / fetch 例外 → null (非キャッシュ)。404 は確定した結果として同じ resourceId の
+  キャッシュも消す (§16 訂正)。
   取得できた値の ID・全受取先・決済条件の不一致や欠落 → throw、両レールを停止 (§15)。
 - `json402(accepts, error, paymentRequiredHeader?)` — 第 3 引数があれば `PAYMENT-REQUIRED`
   ヘッダ付与。既存呼び出しは無変更で動く。
 - `relayPayment(path: 'verify'|'settle', headers: {paymentHeader?; paymentSignatureHeader?}, face: UsdcFace, jpycAccepts)`
   — 上記 POST、通常は `r.json()`、409 は再検証済みの 402 Response を返す。
   USDC pin 未設定なら送信を拒否。fetch/JSON/再検証の例外は route が 500 に変換。
-- `resetUsdcFaceCache()` (テスト用)。
+- `resetUsdcFaceCache()` — テストと relay 409 経路で使う。進行中の取得も無効化する (§16 訂正)。
 
 ### route.ts の処理順 (JPYC 経路のコードパスは既存のまま)
 
@@ -360,7 +361,7 @@ lib/x402/paywallSnippet.ts、app/api/discovery/[id]/route.ts。
   base / base-sepolia と eip155:8453 / eip155:84532 の対応、asset・scheme・amount の整合性も検証する。
   アドレス比較は大文字小文字を区別しない。検証失敗は固定の理由をログに残して停止する。
 - 検証前に 402 を返さず、キャッシュせず、verify / settle / 上流処理を行わない。
-  5 分キャッシュは維持し、pin を再検証して使う。verify / settle 直前にも受取先を照合する。
+  キャッシュ (支払いあり 5 分・支払いなし 30 分。§16) は pin を再検証して使う。verify / settle 直前にも受取先を照合する。
 - USDC relay にはそのリクエストの検証済み v1Accepts を送信し、別リクエストの cache 更新で
   決済条件を差し替えない。409 は cache を破棄して即再取得・再検証し、
   新条件の 402 requirements_mismatch を返す。再取得/再検証失敗時だけ 500。自動再送しない。
@@ -377,3 +378,246 @@ JPYC の `merchantValue` / `feeValue` / `feeReceiver` / `asset` / `network` は�
 防ぐが、OpenPay 自体が侵害された場合のこれらのフィールドの改変までは防がない。
 この範囲は今回の修正対象外として受容する。forwarder の形式・mode・payTo との整合性、および
 USDC の各表現間の network/asset/scheme/amount の整合性の検査は引き続き行う。
+
+## 16. 出品情報キャッシュの 2 段 TTL (2026-10-02)
+
+目的: OpenPay の `GET /api/discovery/<resourceId>` (OpenPay 側 KV を 1 回 3 コマンド消費) の
+呼び出し回数を減らす。現状はクローラーの 402 確認のたびに 5 分おきに取り直している。
+
+### 変更 (lib/gate.ts の myAccepts / acceptsFor と app/api/consult/route.ts のみ)
+
+- キャッシュ許容時間を 2 段にする:
+  - **支払いヘッダあり** (`X-PAYMENT` または `PAYMENT-SIGNATURE`): 従来どおり **5 分**以内の
+    掲載情報だけを使う (古ければ取り直す)。
+  - **支払いヘッダなし** (402 を返すだけ): **30 分**以内ならキャッシュを使う。
+- `acceptsFor(requestUrl, { forPayment })` — 第 2 引数は必須にせず、省略時は
+  `forPayment: true` (= 厳しい側の 5 分) とする (安全側の既定)。
+  `myAccepts(maxAgeMs)` に TTL を渡す。定数は `PAYMENT_LISTING_TTL_MS = 5 * 60_000` /
+  `PROBE_LISTING_TTL_MS = 30 * 60_000`。
+- route.ts は**支払いヘッダの有無を先に読み**、`forPayment = Boolean(X-PAYMENT) ||
+  PAYMENT-SIGNATURE !== null` (既存の「支払いヘッダなし → 402」判定と同じ式) を渡す。
+  それ以外の処理順・レスポンスは不変。
+- キャッシュの時刻は 1 つ (取得の**開始**時刻・コードレビュー裁定 2) のまま。支払いリクエストが取り直せば、その結果は
+  支払いなしリクエストにも使われる。
+
+### 変えないこと (不変条件)
+
+- `validateJpycListing` (出品 ID と受取先 pin の検証) は**キャッシュ利用時も毎回**通す。
+- 失敗 (404・5xx・通信失敗・JSON 不正・検証失敗) はキャッシュしない。取り直しが失敗しても
+  既存の検証済みキャッシュは上書きしない (従来どおり。**404 だけは例外でキャッシュを消す**・計画レビュー裁定 3) — その支払いリクエスト自体は
+  従来どおり 500 `accepts_unavailable` で fail-closed。
+- accepts の金額・受取先・asset 等の金銭フィールドには触らない。
+- ~~`usdcFace` は OpenPay の KV を使わないので変更しない (5 分)。~~ → **誤り。usdcFace も同じ 2 段 TTL にする** (末尾の「訂正」小節)。
+- verify / settle に渡す requirements は支払いリクエスト時点で 5 分以内の掲載値
+  (= 従来と同じ鮮度保証)。
+
+### 既知の帰結 (PR に明記)
+
+掲載内容 (価格等) を OpenPay 側で変更した場合、支払いなしの 402 が新しい値になるまで最大
+30 分かかる (従来は最大 5 分)。支払い経路は 5 分以内の値で verify するため金銭的な不整合は
+起きないが、catalog trust を使う買い手 SDK は「402 の accepts とカタログ掲載値の不一致」を
+検出して支払いを拒否するため、変更直後の最大 30 分は購入が成立しにくい。即時反映が必要な
+ときは再デプロイ (インスタンス再起動) でキャッシュが消える。
+
+### テスト (fake timers・fetch モック)
+
+1. 初回取得から 30 分以内の支払いなしリクエストは discovery を fetch しない。
+2. 30 分を過ぎた支払いなしリクエストは取り直す。
+3. 支払いありのリクエストは、キャッシュが 5 分を過ぎていれば取り直し、5 分以内なら
+   取り直さない (X-PAYMENT と PAYMENT-SIGNATURE の両方)。
+4. 検証に失敗した掲載はキャッシュされない (次のリクエストで再取得)。
+5. キャッシュ利用時も validateJpycListing が毎回通る (キャッシュ後に pin の env を変えると
+   fetch なしで拒否される)。
+6. 取り直し失敗 (5xx) は既存キャッシュを壊さない (その後の 30 分以内の支払いなしリクエストは
+   fetch なしで 402)。
+7. 既存テストは全て緑のまま。
+
+### 計画レビュー裁定 (Fable 5.1, 2026-10-02) — 以下が §16 の確定版
+
+レビュー結論: 機構 (2 段 TTL・取得時刻は 1 つ・省略時 5 分・失敗非キャッシュ) は変更不要。
+JPYC の verify / settle に渡る requirements は、route が 5 分 tier で取った `accepts[0]` だけ。
+USDC の verify / settle に渡るのは別キャッシュ (`usdcFace`・訂正後は同じ 2 段 TTL で支払いは 5 分) の `face.v1Accepts` で、
+discovery の掲載値は 402 本文にしか使わない。支払いヘッダなしのリクエストは 402 を返して終わる
+ため、30 分の値が金銭経路に乗る道はない。ここでいう鮮度は**リクエスト時点**の鮮度 (従来どおり)。
+上流処理の後の settle 時点で 5 分を超えることはありうる (verify と settle は同じ条件で行う必要が
+あり、途中で条件を差し替えない)。
+ただしその安全性は次の暗黙の前提に依存しているので、明文化してテストで固定する。
+
+採用:
+1. **キャッシュヒットで `acceptsCachedAt` を更新しない**。代入は `validateJpycListing` 成功直後の
+   1 箇所だけ。(使うたびに時刻を伸ばすと、クローラーの 402 確認が続く限り支払いも古い値で
+   verify されてしまう。) これは §12 の「5 分は公式意味論」からの意図的な逸脱で、逸脱の範囲は
+   「支払いヘッダなしの 402 応答に使う掲載値」だけ。
+2. **route は `hasPayment` を 1 回だけ計算**し、`acceptsFor(url, { forPayment: hasPayment })` と
+   `if (!hasPayment) return 402` の両方をその 1 変数から導出する (2 つの式を別々に書くと将来
+   ずれうるため)。`X-PAYMENT: ""` は支払いなし扱い、`PAYMENT-SIGNATURE: ""` は支払いあり扱いで、
+   既存の 402 ゲートと一致する。
+3. **失敗時は `acceptsCache` / `acceptsCachedAt` に触れない** (5xx・通信失敗・JSON 不正・検証失敗)。
+   その支払いリクエスト自体は従来どおり 500 `accepts_unavailable` で verify / settle に進まない。
+   結果として、取り直しに失敗した後も 30 分以内の支払いなしリクエストは、最後に検証済みの
+   掲載値 (毎回 pin 再検証つき) で 402 を返す。
+   **例外: 404 だけはキャッシュを破棄する** (Opus 5.5 裁定)。404 は「出品が削除・非公開・
+   一時非表示」の確定シグナルで、残すと最大 30 分、購入できない出品の 402 を広告し続ける。
+   破棄しても金銭面の影響はなく、404 が続く間の挙動は今日の TTL 切れ後と同じ。
+4. テスト A〜H を追加 (下記)。
+5. 「既知の帰結」に追記: キャッシュは Vercel のインスタンス単位なので、削減効果はインスタンス数で
+   薄まり、コールドスタートでは取り直す。PR の確認事項として「OpenPay facilitator が金額の厳密一致
+   を要求するか」(値下げ直後に非 SDK 買い手が旧金額で署名した場合の過払い防止・5 分窓でも既存の
+   論点) と「毎時再検証が 402 の accepts と掲載値を比較するか」(比較するなら変更後 30 分以内に
+   1 回違反になりうる・3 回連続には届かない) を挙げる。
+6. README / DESIGN の「5 分キャッシュ」文言と gate.ts のコメントを 2 段 TTL に合わせる。
+
+不採用:
+- `Cache-Control: no-cache` 付きの支払いなし GET を 5 分 tier に倒す緩和策 — ユーザー仕様が
+  支払いなしの扱いを明確に定めており、即時反映が必要なときは再デプロイで足りるため今回は
+  見送る (PR に将来案として記載)。
+
+追加テスト (既存の `Date.now` スパイ方式に揃え、fake timers は混在させない):
+- A (gate) インターリーブ: t=0 支払いなしで取得 → t=29 分 支払いなし (fetch なし) → 直後の
+  支払いあり → fetch される。
+- B (route) t=0 に支払いなしで旧価格の 402 → discovery を新価格に差し替え → t=10 分の
+  支払いなしは旧価格の 402 (fetch なし) → t=10 分の支払いあり → facilitator の verify / settle
+  に渡る `paymentRequirements.maxAmountRequired` が新価格。
+- C (route) B の続き: その直後の支払いなしが新価格の 402 を返し、fetch しない。
+- D (route) `X-PAYMENT: ""` は t=10 分で fetch せず 402 / `PAYMENT-SIGNATURE: ""` は t=10 分で
+  discovery を取り直す。
+- E (route) ~~usdcFace 不変: t=10 分の支払いなしで `/relay/requirements` は取り直す~~ →
+  訂正により逆転: 支払いなしは 30 分以内なら `/relay/requirements` も取り直さない。
+- F (route) 支払いありの取り直しが 5xx → そのリクエストは 500 `accepts_unavailable` で
+  verify / settle 未呼出 → その後 30 分以内の支払いなしは fetch なしで 402。
+- G (gate) 30 分境界: 29 分 59.999 秒はヒット、30 分ちょうどで取り直す。
+- H (gate) 30 分 tier でも pin 再検証: t=10 分、`EXPECTED_RECIPIENT` 変更後の支払いなしが fetch
+  なしで拒否される。
+- 404 でキャッシュ破棄: 支払いありの取り直しが 404 → その後の支払いなし (30 分以内) は再取得する。
+
+### コードレビュー裁定 (Codex GPT 6 Astra xHigh・読むだけ, 2026-10-02)
+
+採用 (修正済み):
+1. **404 破棄と並行取得の競合 (今回の変更で新規)**: 遅れて届いた古い成功応答が削除済みの出品を
+   書き戻す / 遅れて届いた古い 404 が新しい成功を消す、の両方向。→ discovery 取得ごとに順序番号を
+   振り、**後から開始した取得の結果だけを反映**する (完了順は問わない)。反映済みより古い取得の
+   成功応答は、自分の値ではなく反映済みのキャッシュに従う (キャッシュが無ければ拒否)。404 は
+   同じ出品 ID のキャッシュだけを消す。`resetAcceptsCache()` は進行中の取得も無効化する。
+2. **遅い応答が新しい値を上書きし寿命をリセットする (既存・30 分化で影響拡大)**: 1 の順序番号で
+   上書きを防ぎ、加えてキャッシュ時刻を**取得の開始時刻**で記録する。取得に許容年齢 (支払いあり
+   5 分) 以上かかった応答はそのリクエストで使わず、キャッシュもしない。
+3. テストの抜け: 保留中の fetch で完了順を操作する競合テスト (両方向)・遅い古い応答・開始時刻基準・
+   許容年齢超えの拒否、USDC v1 の 5 分 tier、値段変更テストの verify / settle 呼び出し回数の厳密化。
+4. 文書: JPYC と USDC の経路を分けて記述し、鮮度はリクエスト時点であることを明記 (上の裁定本文)。
+
+不採用 (既存の性質・PR の確認事項に記載):
+- **settle 時点での 5 分超過** — 鮮度保証はリクエスト時点 (ユーザー仕様の「今までどおり」)。
+  上流処理 (coo-icp は数秒) の後に settle を打ち切ると、回答を作った後で決済を捨て、境界付近の
+  正当な購入を失敗させる。verify と settle は同じ条件で行う必要があり差し替えられない。
+- **サーバー時計の巻き戻し** — `usdcFace` を含む既存キャッシュ全体の性質で、直すなら単調時計への
+  移行 (今回の範囲外・今後の課題)。Vercel の実行環境は NTP 同期で、大きな巻き戻しは想定しにくい。
+
+### 訂正: usdcFace も 2 段 TTL にする (2026-10-02・ユーザー指示)
+
+前提の訂正: `GET /api/x402/relay/requirements` (usdcFace) も OpenPay 側の KV を 1 回 3 コマンド
+消費する。§16 冒頭の「usdcFace は KV を使わないので変えない」は誤りで、**myAccepts と同じ 2 段
+キャッシュにする** (支払いヘッダありは 5 分・なしは 30 分・検証は毎回・失敗はキャッシュしない)。
+
+注意: USDC の verify / settle に渡る条件 (`face.v1Accepts`) は**このキャッシュそのもの**である
+(relayPayment が `paymentRequirements: face.v1Accepts` を送る)。したがって myAccepts に入れた
+並行取得の保護 (コードレビュー裁定 1・2) も同じように入れる。
+
+設計 (Opus 5.5):
+- `usdcFace(options: { forPayment?: boolean } = {})` — 省略時は支払い扱い (5 分)。route は
+  `usdcFace({ forPayment: hasPayment })`。relayPayment の 409 経路 (`resetUsdcFaceCache()` の後の
+  `usdcFace()`) は支払いの文脈なので省略 (= 5 分) のまま。
+- ヒット時は今までどおり `validateUsdcFace` を毎回通し、`structuredClone` を返す。ヒットで
+  時刻を更新しない。
+- 取得ごとに順序番号 (usdcFetchSeq / usdcAppliedSeq) を振り、後から開始した取得の結果だけを
+  反映する。キャッシュ時刻は取得の開始時刻。`resetUsdcFaceCache()` は進行中の取得も無効化する。
+- 失敗の扱い (既存の 2 分類は維持):
+  - **可用性の失敗** (通信失敗・JSON 不正・非 2xx・許容年齢超えの応答) → `null` を返す
+    (USDC 面なし = JPYC のみで継続)。キャッシュに触れない。
+  - **404** (`resource_not_found` = USDC 面が無効 / `not_found` = リレー停止) → 確定シグナルとして
+    扱い、後から開始した取得なら同じ resourceId のキャッシュを消してから `null`。
+    (残すと、USDC 面を止めた後も最大 30 分、支払いなしの 402 が USDC accepts を出し続ける。)
+    503 `relay_unconfigured` / 429 `rate_limited` は一時的な失敗なので消さない。
+  - **信頼の失敗** (`validateUsdcFace` の不一致) → 今までどおり throw (両レール停止・500)。
+    キャッシュしない。
+- 反映済みより古い取得の成功応答は、反映済みのキャッシュ (同じ resourceId かつ許容年齢内なら
+  検証して返す) に従い、無ければ `null`。
+- 支払いありの取り直しが可用性の失敗で `null` になった場合、そのリクエストは今までどおり
+  USDC 面なしで扱われる (PAYMENT-SIGNATURE / base の X-PAYMENT は 402 `payment_invalid`)。
+  既存の検証済みキャッシュは残り、30 分以内の支払いなしリクエストはそれで 402 を返す。
+
+既知の帰結: OpenPay 側で USDC 価格や受取先を変えた場合も、支払いなしの 402 に反映されるまで最大
+30 分かかる。USDC の支払いは 5 分以内に取得した条件で verify / settle する。リレーが新しい条件と
+食い違えば 409 → キャッシュを捨てて取り直し → 新しい条件の 402 (既存の仕組み) で回復する。
+
+テスト (route + gate):
+1. 支払いなしは 30 分以内なら requirements を取り直さない / 30 分で取り直す。
+2. 支払いあり (USDC v2 / USDC v1 / JPYC) は 5 分以内なら取り直さず、5 分で取り直す。
+3. ヒットのたびに validateUsdcFace (キャッシュ後に EXPECTED_USDC_RECIPIENT を変えると fetch なしで
+   拒否)。
+4. 失敗はキャッシュしない (503 → 次で取り直す / 検証失敗 → 次で取り直す)。
+5. 新しい USDC 条件が relay verify / settle に渡る (支払いなしの 402 は古いまま)。
+6. 404 で破棄、503 では残す。
+7. 並行取得: 404 と成功の両方向、遅い古い応答、開始時刻基準、許容年齢超えは null で非キャッシュ。
+8. 既存テストの「USDC 面は 5 分ごとに取り直す」(route) は新仕様に合わせて改める。
+
+#### 訂正の計画レビュー裁定 (Fable 5.1, 2026-10-02) — 全件採用
+
+- 失敗の分類は **status だけ**で行い、非 2xx の本文は読まない (`resource_not_found` と `not_found` を区別しない。
+  リモート本文をログに出さない方針とも整合)。可用性の失敗は「通信失敗・JSON 不正・**404 以外の**非 2xx・
+  許容年齢超え」。
+- 成功応答の処理順を固定: `validateUsdcFace` → 許容年齢 (`Date.now() - startedAt >= maxAgeMs` なら null・
+  非キャッシュ) → `seq > usdcAppliedSeq` なら反映 (`usdcFaceCachedAt = startedAt`) → それ以外は反映済みの
+  キャッシュ (同じ resourceId・許容年齢内なら検証して `structuredClone` で返す) に従い、無ければ null。
+  検証を年齢判定とキャッシュ書き込みより前に置くので、遅れて届いた不正な応答は null ではなく throw
+  (両レール停止) になる。
+- `resetUsdcFaceCache()` は `usdcAppliedSeq = usdcFetchSeq` で進行中の取得も無効化する。409 経路 (本番で
+  reset を呼ぶ唯一の経路) で、reset 前に始まった取得が 409 を起こした旧条件を書き戻すのを防ぐ。409 経路は
+  `usdcFace({ forPayment: true })` と明示する。
+- TTL 定数は myAccepts と共有する (`PAYMENT_LISTING_TTL_MS` / `PROBE_LISTING_TTL_MS`)。
+- 既知の帰結に追加: **リレーの一時障害 (503/429/通信失敗) の間、支払いなしの 402 は最大 30 分 USDC accepts を
+  出し続ける (今日は 5 分)。その間の USDC 支払いは 402 `payment_invalid` (accepts は JPYC のみ・
+  `PAYMENT-REQUIRED` なし) で止まり、relay verify / settle は呼ばれず課金されない。** 支払いありの取り直しが
+  失敗したときにキャッシュも消す対案は、障害中に支払いなしリクエストが毎回取り直すことになり myAccepts の
+  裁定と逆になるので不採用。
+- JPYC 支払いのときも usdcFace を 5 分 tier で取り直す (USDC 面はエラー 402 の本文にしか使わない) のは、
+  `hasPayment` 1 変数から両方を導く裁定を優先して許容する。KV コストは支払いごとで、クローラーごとではない。
+
+テスト (追加・改め済み): route — 支払いなし 30 分境界 (USDC)、支払いあり 3 レールの requirements 回数、空ヘッダの
+requirements 回数、新しい USDC 条件が relay verify / settle に届く (支払いなし 402 は旧条件のまま)、リレー障害中の
+USDC 支払いは課金なしで 402 かつ支払いなしは検証済みキャッシュで USDC を出す、404 で破棄、ヒットのたびの
+USDC pin 再検証。gate — 30 分境界、ヒットで年齢を伸ばさない、省略時 5 分、失敗の非キャッシュ (503・検証失敗)、
+並行取得の両方向、遅い古い応答、開始時刻基準、許容年齢超えは null・非キャッシュ、遅れた不正応答は throw、
+reset による進行中取得の無効化。既存の「USDC 面は 5 分ごとに取り直す」は逆転、「5 分キャッシュ」の名前を改めた。
+
+#### 訂正のコードレビュー裁定 (Codex GPT 6 Astra xHigh・読むだけ, 2026-10-02)
+
+- **minor (採用)**: 「古い取得の応答が不正 (受取先の差し替え) で、新しい有効な値がすでにキャッシュ済み」の
+  場合に throw することを固定するテストが無かった (「新しい結果があるときは検証を飛ばす」変異が全テストを
+  通過した)。usdcFace と myAccepts の両方にテストを追加し、変異が検出されることを確認した。
+- **major (不採用)**: 「古い取得の 404 は、より新しく開始した取得が 503 で終わった / まだ進行中の間は
+  キャッシュを消すべきでない (`seq === fetchSeq` を要求すべき)」という指摘。採らない理由:
+  404 は OpenPay が「出品 / USDC 面は無い」と明言した**確定した結果**で、503・429・通信失敗は何も言って
+  いない**不確定な失敗**。順序の規則は「**確定した結果 (成功または 404) のうち、最も後に開始した取得の
+  ものだけを反映する。不確定な失敗は順序を進めず、確定結果を上書きも取り消しもしない**」で、myAccepts と
+  同じ (Fable 5.1 の最終監査で妥当と確認済み)。古い 404 の後に新しい取得が成功すれば、その成功が反映されて
+  キャッシュは戻る。この挙動はテストで明示的に固定した (新しい取得が 503 で終わったら古い 404 はキャッシュを
+  消す)。なお、Astra に渡した不変条件の文言 (「最新に開始した取得の 404 だけが消す」) は実装の意図より
+  厳しい書き方で、誤りはこちらの文言側にあった。
+
+既知の帰結 (PR に記載): 「失敗はキャッシュしない」ので、`EXPECTED_USDC_RECIPIENT` を設定したまま OpenPay 側で
+USDC 面を無効にすると、支払いなしリクエストのたびに requirements を取りに行く (404・KV を消費)。これは今回の
+変更前からの性質。USDC 面を止めるときは `EXPECTED_USDC_RECIPIENT` も外せば取りに行かない。discovery の 404
+(出品が消えた) も同様だが、その場合ゲートウェイ自体が販売できない状態。
+
+#### 最終監査 (Fable 5.1) を受けた補足 — 人間のレビュアー向け
+
+- **リレー一時障害中の挙動の正確な範囲**: 「その間の USDC 支払いは 402 で止まり課金されない」が成り立つのは、
+  支払いの時点でキャッシュが 5 分を超えている (= 取り直しが失敗して null になる) とき。障害開始から 5 分以内は
+  検証済みの条件がそのまま使われ、リレーの verify / settle が動いていれば通常どおり決済され、リレー全体が
+  落ちていれば verify が失敗して課金されない。誤った課金が生じる経路はない。
+- **USDC 支払いが 2 件同時に 409 を受けた場合**: 後の支払いの `resetUsdcFaceCache()` が先の支払いの再取得を
+  無効化するため、先の再取得が先に終わると、先の買い手は 402 `requirements_mismatch` ではなく 500
+  `payment_verification_failed` を受けることがある (変更前は 402 と新しい条件)。409 はリレーがすでに拒否した
+  状態なので課金はなく、再試行すれば新しい条件の 402 が返る (fail-closed)。「reset は進行中の取得も無効化する」
+  の代償で、対案 (無効化しない) は 409 を起こした旧条件の書き戻しを許すため採らない。
+- 「404 は KV を消費する」は OpenPay 側の実装 (リレーは rate limit とレジストリ参照で KV を使う) に基づく想定。
