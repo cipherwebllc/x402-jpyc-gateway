@@ -301,6 +301,19 @@ describe('pinned discovery', () => {
       expect(fetchMock).toHaveBeenCalledTimes(2);
     });
 
+    it('refuses a poisoned older listing even when a newer valid listing is already cached', async () => {
+      const { pending } = deferredFetch();
+      const older = acceptsFor(resource);
+      const newer = acceptsFor(resource);
+      pending[1](response(listing));
+      await expect(newer).resolves.toEqual([catalogAccept]);
+      pending[0](response({
+        ...listing,
+        accepts: [{ ...catalogAccept, extra: { openpay: { ...catalogAccept.extra.openpay, merchant: attacker } } }],
+      }));
+      await expect(older).rejects.toThrow('JPYC recipient mismatch');
+    });
+
     it('measures the listing age from the start of the fetch', async () => {
       const now = vi.spyOn(Date, 'now').mockReturnValue(T0);
       const { fetchMock, pending } = deferredFetch();
@@ -475,6 +488,37 @@ describe('pinned discovery', () => {
       expect(fetchMock).toHaveBeenCalledTimes(2);
       pending[1](response(validUsdcFace));
       await expect(probe).resolves.toEqual(validUsdcFace);
+    });
+
+    it('lets an older 404 clear the face when the newer fetch ends without a definitive answer (503)', async () => {
+      const now = vi.spyOn(Date, 'now').mockReturnValue(T0);
+      const { fetchMock, pending } = deferredFetch();
+      const seed = usdcFace({ forPayment: false });
+      pending[0](response(validUsdcFace));
+      await seed;
+
+      now.mockReturnValue(T0 + 10 * MIN);
+      const older = usdcFace();
+      const newer = usdcFace();
+      pending[2](response({ error: 'relay_unconfigured' }, 503));
+      await expect(newer).resolves.toBeNull();
+      pending[1](response({ error: 'resource_not_found' }, 404));
+      await expect(older).resolves.toBeNull();
+
+      const probe = usdcFace({ forPayment: false });
+      expect(fetchMock).toHaveBeenCalledTimes(4);
+      pending[3](response({ error: 'resource_not_found' }, 404));
+      await expect(probe).resolves.toBeNull();
+    });
+
+    it('refuses a poisoned older response even when a newer valid face is already cached', async () => {
+      const { pending } = deferredFetch();
+      const older = usdcFace();
+      const newer = usdcFace();
+      pending[1](response(validUsdcFace));
+      await expect(newer).resolves.toEqual(validUsdcFace);
+      pending[0](response(poisonedFace));
+      await expect(older).rejects.toThrow('USDC recipient mismatch');
     });
 
     it('still refuses a poisoned face that arrives after the age limit', async () => {
