@@ -16,6 +16,9 @@ import {
 export { decodePaymentHeader } from './paymentHeader';
 
 const OPENPAY = 'https://open-pay.jp';
+// discovery は OpenPay 側の KV を消費するため、402 を返すだけの支払いなしリクエストは長く使う。
+const PAYMENT_LISTING_TTL_MS = 5 * 60_000;
+const PROBE_LISTING_TTL_MS = 30 * 60_000;
 
 export type PaymentRequirements = {
   resource?: string;
@@ -88,9 +91,10 @@ export async function usdcFace(): Promise<UsdcFace | null> {
   return structuredClone(value);
 }
 
-async function myAccepts(): Promise<PaymentRequirements[]> {
+async function myAccepts(maxAgeMs: number): Promise<PaymentRequirements[]> {
   const config = sellerConfig();
-  if (acceptsCache?.id === config.resourceId && Date.now() - acceptsCachedAt < 5 * 60_000) {
+  // ヒットで acceptsCachedAt を更新してはならない。支払いリクエストの 5 分判定は取得時刻が基準。
+  if (acceptsCache?.id === config.resourceId && Date.now() - acceptsCachedAt < maxAgeMs) {
     validateJpycListing(acceptsCache, config);
     return acceptsCache.accepts;
   }
@@ -103,6 +107,8 @@ async function myAccepts(): Promise<PaymentRequirements[]> {
     rejectSellerRequirements('OpenPay temporarily unavailable (discovery request failed)');
   }
   if (res.status === 404) {
+    // 出品が消えた確定シグナル。購入できない出品の 402 をキャッシュから出し続けない。
+    resetAcceptsCache();
     rejectSellerRequirements('OpenPay listing not found or not public (HTTP 404)');
   }
   if (res.status >= 500) {
@@ -118,7 +124,7 @@ async function myAccepts(): Promise<PaymentRequirements[]> {
     rejectSellerRequirements('invalid discovery response');
   }
   validateJpycListing(mine, config);
-  acceptsCache = mine; // 検証済みの掲載値のみを 5 分キャッシュ
+  acceptsCache = mine; // 検証済みの掲載値のみをキャッシュ (支払いあり 5 分 / なし 30 分で使う)
   acceptsCachedAt = Date.now();
   return mine.accepts;
 }
@@ -127,8 +133,14 @@ async function myAccepts(): Promise<PaymentRequirements[]> {
 // 買い手は accept.resource と自分が叩いた URL の一致を検証するため resource は
 // 差し替えが必要だが、金銭フィールド (network/asset/payTo/maxAmountRequired 等) は
 // カタログ掲載値と照合されるので絶対に触らない。
-export async function acceptsFor(requestUrl: string): Promise<PaymentRequirements[]> {
-  const accepts = await myAccepts();
+// forPayment を省略したときは支払い扱い (厳しい側の 5 分) にする。
+export async function acceptsFor(
+  requestUrl: string,
+  options: { forPayment?: boolean } = {},
+): Promise<PaymentRequirements[]> {
+  const accepts = await myAccepts(
+    options.forPayment === false ? PROBE_LISTING_TTL_MS : PAYMENT_LISTING_TTL_MS,
+  );
   const configuredResource = process.env.MY_RESOURCE_URL;
   if (!configuredResource) {
     throw new Error('MY_RESOURCE_URL is not set');

@@ -174,6 +174,73 @@ describe('pinned discovery', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  describe('unpaid (probe) cache tier', () => {
+    const T0 = 1_000_000;
+    const MIN = 60_000;
+    const listingFetch = () => vi.fn().mockImplementation(async () => response(listing));
+
+    it('reuses a validated listing for unpaid requests until 30 minutes and refetches at 30 minutes', async () => {
+      const now = vi.spyOn(Date, 'now').mockReturnValue(T0);
+      const fetchMock = listingFetch();
+      vi.stubGlobal('fetch', fetchMock);
+      await acceptsFor(resource, { forPayment: false });
+      now.mockReturnValue(T0 + 30 * MIN - 1);
+      await acceptsFor(resource, { forPayment: false });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      now.mockReturnValue(T0 + 30 * MIN);
+      await acceptsFor(resource, { forPayment: false });
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not extend the listing age on unpaid hits, so a later payment still refetches', async () => {
+      const now = vi.spyOn(Date, 'now').mockReturnValue(T0);
+      const fetchMock = listingFetch();
+      vi.stubGlobal('fetch', fetchMock);
+      await acceptsFor(resource, { forPayment: false });
+      now.mockReturnValue(T0 + 29 * MIN);
+      await acceptsFor(resource, { forPayment: false });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      await acceptsFor(resource, { forPayment: true });
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
+    it('treats omitted options as a payment (5-minute tier)', async () => {
+      const now = vi.spyOn(Date, 'now').mockReturnValue(T0);
+      const fetchMock = listingFetch();
+      vi.stubGlobal('fetch', fetchMock);
+      await acceptsFor(resource, { forPayment: false });
+      now.mockReturnValue(T0 + 5 * MIN);
+      await acceptsFor(resource);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
+    it('revalidates the seller pins on every unpaid cache hit', async () => {
+      const now = vi.spyOn(Date, 'now').mockReturnValue(T0);
+      const fetchMock = listingFetch();
+      vi.stubGlobal('fetch', fetchMock);
+      await acceptsFor(resource, { forPayment: false });
+      now.mockReturnValue(T0 + 10 * MIN);
+      vi.stubEnv('EXPECTED_RECIPIENT', attacker);
+      await expect(acceptsFor(resource, { forPayment: false })).rejects.toThrow('JPYC recipient mismatch');
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not cache a listing that fails validation', async () => {
+      const poisoned = {
+        ...listing,
+        accepts: [{ ...catalogAccept, extra: { openpay: { ...catalogAccept.extra.openpay, merchant: attacker } } }],
+      };
+      const bodies: unknown[] = [poisoned, listing, listing];
+      const fetchMock = vi.fn().mockImplementation(async () => response(bodies.shift()));
+      vi.stubGlobal('fetch', fetchMock);
+      await expect(acceptsFor(resource, { forPayment: false })).rejects.toThrow('JPYC recipient mismatch');
+      await expect(acceptsFor(resource, { forPayment: false })).resolves.toEqual([catalogAccept]);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      await acceptsFor(resource, { forPayment: false });
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+  });
+
   it('cannot reuse cached requirements after the configured recipient changes', async () => {
     const fetchMock = vi.fn().mockResolvedValue(response(listing));
     vi.stubGlobal('fetch', fetchMock);

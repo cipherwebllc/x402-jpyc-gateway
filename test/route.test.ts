@@ -670,4 +670,153 @@ describe('GET /api/consult', () => {
     expect(challenge.status).toBe(500);
     expect(relayCallsTo(fetchMock, 'requirements')).toHaveLength(3);
   });
+
+  describe('discovery cache tiers (unpaid 30 minutes / paid 5 minutes)', () => {
+    const T0 = 1_000_000;
+    const MIN = 60_000;
+    const repricedAccept = {
+      ...catalogAccept,
+      maxAmountRequired: '2010000000000000000',
+      extra: { openpay: { ...catalogAccept.extra.openpay, merchantValue: '2000000000000000000' } },
+    };
+    const repricedListing = { ...listing, accepts: [repricedAccept] };
+
+    function discoveryCalls(mock: ReturnType<typeof vi.fn>) {
+      return mock.mock.calls.filter(([input]) => String(input) === `${OPENPAY}/api/discovery/${resourceId}`);
+    }
+
+    async function firstAmount(res: Response): Promise<string> {
+      return ((await res.json()) as { accepts: { maxAmountRequired: string }[] }).accepts[0].maxAmountRequired;
+    }
+
+    it('does not refetch discovery for unpaid requests within 30 minutes and refetches at 30 minutes', async () => {
+      const now = vi.spyOn(Date, 'now').mockReturnValue(T0);
+
+      expect((await GET(new Request(url()))).status).toBe(402);
+      now.mockReturnValue(T0 + 30 * MIN - 1);
+      expect((await GET(new Request(url('?q=again')))).status).toBe(402);
+      expect(discoveryCalls(fetchMock)).toHaveLength(1);
+
+      now.mockReturnValue(T0 + 30 * MIN);
+      expect((await GET(new Request(url()))).status).toBe(402);
+      expect(discoveryCalls(fetchMock)).toHaveLength(2);
+    });
+
+    it.each([
+      ['X-PAYMENT', () => request()],
+      ['PAYMENT-SIGNATURE', () => new Request(url(), { headers: { 'PAYMENT-SIGNATURE': 'signature' } })],
+    ] as const)('reuses a listing under 5 minutes old for a %s payment and refetches at 5 minutes', async (_, paid) => {
+      const now = vi.spyOn(Date, 'now').mockReturnValue(T0);
+      fetchMock = fetchFor({ usdc: true });
+      vi.stubGlobal('fetch', fetchMock);
+
+      await GET(new Request(url()));
+      now.mockReturnValue(T0 + 5 * MIN - 1);
+      expect((await GET(paid())).status).toBe(200);
+      expect(discoveryCalls(fetchMock)).toHaveLength(1);
+
+      now.mockReturnValue(T0 + 5 * MIN);
+      expect((await GET(paid())).status).toBe(200);
+      expect(discoveryCalls(fetchMock)).toHaveLength(2);
+    });
+
+    it('verifies and settles against the fresh listing while unpaid 402s may still show the cached one', async () => {
+      const now = vi.spyOn(Date, 'now').mockReturnValue(T0);
+      const state: FacilitatorState = {};
+      fetchMock = fetchFor(state);
+      vi.stubGlobal('fetch', fetchMock);
+
+      expect(await firstAmount(await GET(new Request(url())))).toBe(catalogAccept.maxAmountRequired);
+      state.discovery = repricedListing;
+      now.mockReturnValue(T0 + 10 * MIN);
+
+      const probe = await GET(new Request(url()));
+      expect(probe.status).toBe(402);
+      expect(await firstAmount(probe)).toBe(catalogAccept.maxAmountRequired);
+      expect(discoveryCalls(fetchMock)).toHaveLength(1);
+
+      const paid = await GET(request());
+      expect(paid.status).toBe(200);
+      expect(discoveryCalls(fetchMock)).toHaveLength(2);
+      for (const endpoint of ['verify', 'settle'] as const) {
+        const init = callsTo(fetchMock, endpoint)[0][1] as RequestInit;
+        const body = JSON.parse(String(init.body)) as { paymentRequirements: { maxAmountRequired: string } };
+        expect(body.paymentRequirements.maxAmountRequired).toBe(repricedAccept.maxAmountRequired);
+      }
+
+      const afterPayment = await GET(new Request(url()));
+      expect(await firstAmount(afterPayment)).toBe(repricedAccept.maxAmountRequired);
+      expect(discoveryCalls(fetchMock)).toHaveLength(2);
+    });
+
+    it('treats an empty X-PAYMENT as unpaid and an empty PAYMENT-SIGNATURE as paid', async () => {
+      const now = vi.spyOn(Date, 'now').mockReturnValue(T0);
+      fetchMock = fetchFor({ usdc: true });
+      vi.stubGlobal('fetch', fetchMock);
+
+      await GET(new Request(url()));
+      now.mockReturnValue(T0 + 10 * MIN);
+
+      const emptyPayment = await GET(new Request(url(), { headers: { 'X-PAYMENT': '' } }));
+      expect(emptyPayment.status).toBe(402);
+      expect(discoveryCalls(fetchMock)).toHaveLength(1);
+
+      await GET(new Request(url(), { headers: { 'PAYMENT-SIGNATURE': '' } }));
+      expect(discoveryCalls(fetchMock)).toHaveLength(2);
+    });
+
+    it('keeps refreshing the USDC face every 5 minutes while unpaid requests reuse the listing', async () => {
+      const now = vi.spyOn(Date, 'now').mockReturnValue(T0);
+      fetchMock = fetchFor({ usdc: true });
+      vi.stubGlobal('fetch', fetchMock);
+
+      await GET(new Request(url()));
+      now.mockReturnValue(T0 + 10 * MIN);
+      const res = await GET(new Request(url()));
+
+      expect(res.status).toBe(402);
+      expect(relayCallsTo(fetchMock, 'requirements')).toHaveLength(2);
+      expect(discoveryCalls(fetchMock)).toHaveLength(1);
+    });
+
+    it('fails a paid request closed when the refetch fails and keeps the validated listing for unpaid 402s', async () => {
+      const now = vi.spyOn(Date, 'now').mockReturnValue(T0);
+      const state: FacilitatorState = {};
+      fetchMock = fetchFor(state);
+      vi.stubGlobal('fetch', fetchMock);
+
+      await GET(new Request(url()));
+      now.mockReturnValue(T0 + 10 * MIN);
+      state.discoveryStatus = 503;
+
+      const paid = await GET(request());
+      expect(paid.status).toBe(500);
+      expect(await paid.json()).toEqual({ error: 'accepts_unavailable' });
+      expect(callsTo(fetchMock, 'verify')).toHaveLength(0);
+      expect(callsTo(fetchMock, 'settle')).toHaveLength(0);
+      expect(adapter).not.toHaveBeenCalled();
+      expect(discoveryCalls(fetchMock)).toHaveLength(2);
+
+      now.mockReturnValue(T0 + 20 * MIN);
+      expect((await GET(new Request(url()))).status).toBe(402);
+      expect(discoveryCalls(fetchMock)).toHaveLength(2);
+    });
+
+    it('drops the cached listing when OpenPay reports it gone (404)', async () => {
+      const now = vi.spyOn(Date, 'now').mockReturnValue(T0);
+      const state: FacilitatorState = {};
+      fetchMock = fetchFor(state);
+      vi.stubGlobal('fetch', fetchMock);
+
+      await GET(new Request(url()));
+      now.mockReturnValue(T0 + 10 * MIN);
+      state.discoveryStatus = 404;
+      expect((await GET(request())).status).toBe(500);
+
+      now.mockReturnValue(T0 + 11 * MIN);
+      const probe = await GET(new Request(url()));
+      expect(probe.status).toBe(500);
+      expect(discoveryCalls(fetchMock)).toHaveLength(3);
+    });
+  });
 });
