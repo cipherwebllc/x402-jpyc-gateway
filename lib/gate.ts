@@ -147,7 +147,7 @@ async function myAccepts(maxAgeMs: number): Promise<PaymentRequirements[]> {
     return mine.accepts;
   }
   // 後から開始した取得の結果が先に反映済み。古い応答ではなくそちらに従う。
-  if (acceptsCache?.id === config.resourceId) {
+  if (acceptsCache?.id === config.resourceId && Date.now() - acceptsCachedAt < maxAgeMs) {
     validateJpycListing(acceptsCache, config);
     return acceptsCache.accepts;
   }
