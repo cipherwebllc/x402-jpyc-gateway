@@ -277,16 +277,17 @@ verify→upstream→settle の正順維持、USDC 面の可用性障害時は JP
 
 - `UsdcFace` 型: `{ resourceId: string; v1Accepts: PaymentRequirements;
   v2Accept: PaymentRequirements; paymentRequiredHeader: string; [k: string]: unknown }` (open record)。
-- `usdcFace(): Promise<UsdcFace | null>` — 必須 pin を検査。EXPECTED_USDC_RECIPIENT が未設定・空なら
+- `usdcFace(options?: { forPayment?: boolean }): Promise<UsdcFace | null>` — 必須 pin を検査。EXPECTED_USDC_RECIPIENT が未設定・空なら
   cache を使わず fetch もせず null。設定時は検証済み requirements のみキャッシュ (支払いあり 5 分・支払いなし 30 分。§16 訂正)。
-  非 2xx / JSON 読み取り失敗 / fetch 例外 → null (非キャッシュ)。
+  非 2xx / JSON 読み取り失敗 / fetch 例外 → null (非キャッシュ)。404 は確定した結果として同じ resourceId の
+  キャッシュも消す (§16 訂正)。
   取得できた値の ID・全受取先・決済条件の不一致や欠落 → throw、両レールを停止 (§15)。
 - `json402(accepts, error, paymentRequiredHeader?)` — 第 3 引数があれば `PAYMENT-REQUIRED`
   ヘッダ付与。既存呼び出しは無変更で動く。
 - `relayPayment(path: 'verify'|'settle', headers: {paymentHeader?; paymentSignatureHeader?}, face: UsdcFace, jpycAccepts)`
   — 上記 POST、通常は `r.json()`、409 は再検証済みの 402 Response を返す。
   USDC pin 未設定なら送信を拒否。fetch/JSON/再検証の例外は route が 500 に変換。
-- `resetUsdcFaceCache()` (テスト用)。
+- `resetUsdcFaceCache()` — テストと relay 409 経路で使う。進行中の取得も無効化する (§16 訂正)。
 
 ### route.ts の処理順 (JPYC 経路のコードパスは既存のまま)
 
@@ -607,3 +608,16 @@ reset による進行中取得の無効化。既存の「USDC 面は 5 分ごと
 USDC 面を無効にすると、支払いなしリクエストのたびに requirements を取りに行く (404・KV を消費)。これは今回の
 変更前からの性質。USDC 面を止めるときは `EXPECTED_USDC_RECIPIENT` も外せば取りに行かない。discovery の 404
 (出品が消えた) も同様だが、その場合ゲートウェイ自体が販売できない状態。
+
+#### 最終監査 (Fable 5.1) を受けた補足 — 人間のレビュアー向け
+
+- **リレー一時障害中の挙動の正確な範囲**: 「その間の USDC 支払いは 402 で止まり課金されない」が成り立つのは、
+  支払いの時点でキャッシュが 5 分を超えている (= 取り直しが失敗して null になる) とき。障害開始から 5 分以内は
+  検証済みの条件がそのまま使われ、リレーの verify / settle が動いていれば通常どおり決済され、リレー全体が
+  落ちていれば verify が失敗して課金されない。誤った課金が生じる経路はない。
+- **USDC 支払いが 2 件同時に 409 を受けた場合**: 後の支払いの `resetUsdcFaceCache()` が先の支払いの再取得を
+  無効化するため、先の再取得が先に終わると、先の買い手は 402 `requirements_mismatch` ではなく 500
+  `payment_verification_failed` を受けることがある (変更前は 402 と新しい条件)。409 はリレーがすでに拒否した
+  状態なので課金はなく、再試行すれば新しい条件の 402 が返る (fail-closed)。「reset は進行中の取得も無効化する」
+  の代償で、対案 (無効化しない) は 409 を起こした旧条件の書き戻しを許すため採らない。
+- 「404 は KV を消費する」は OpenPay 側の実装 (リレーは rate limit とレジストリ参照で KV を使う) に基づく想定。
