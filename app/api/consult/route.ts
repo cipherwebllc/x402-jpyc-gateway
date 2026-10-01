@@ -45,7 +45,7 @@ export async function GET(request: Request): Promise<Response> {
   let usdc: UsdcFace | null;
   try {
     accepts = await acceptsFor(request.url, { forPayment: hasPayment });
-    usdc = await usdcFace();
+    usdc = await usdcFace({ forPayment: hasPayment });
   } catch {
     return jsonError(500, 'accepts_unavailable');
   }

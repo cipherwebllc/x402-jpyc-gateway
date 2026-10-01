@@ -13,7 +13,7 @@ import { GET } from '@/app/api/consult/route';
 import {
   OPENPAY, resource, resourceId, merchant, usdcMerchant, attacker,
   catalogAccept, listing, paymentPayload, paymentHeader,
-  paymentRequiredHeader, usdcAccept, usdcFace, response,
+  paymentRequiredHeader, usdcAccept, usdcFace, v2Accept, response,
 } from './fixtures';
 
 function url(path = '?q=hello'): string {
@@ -481,7 +481,7 @@ describe('GET /api/consult', () => {
     },
   );
 
-  it('caches a valid USDC face across requests for five minutes', async () => {
+  it('caches a valid USDC face across unpaid requests', async () => {
     fetchMock = fetchFor({ usdc: true });
     vi.stubGlobal('fetch', fetchMock);
 
@@ -719,10 +719,12 @@ describe('GET /api/consult', () => {
       now.mockReturnValue(T0 + 5 * MIN - 1);
       expect((await GET(paid())).status).toBe(200);
       expect(discoveryCalls(fetchMock)).toHaveLength(1);
+      expect(relayCallsTo(fetchMock, 'requirements')).toHaveLength(1);
 
       now.mockReturnValue(T0 + 5 * MIN);
       expect((await GET(paid())).status).toBe(200);
       expect(discoveryCalls(fetchMock)).toHaveLength(2);
+      expect(relayCallsTo(fetchMock, 'requirements')).toHaveLength(2);
     });
 
     it('verifies and settles against the fresh listing while unpaid 402s may still show the cached one', async () => {
@@ -767,23 +769,133 @@ describe('GET /api/consult', () => {
       const emptyPayment = await GET(new Request(url(), { headers: { 'X-PAYMENT': '' } }));
       expect(emptyPayment.status).toBe(402);
       expect(discoveryCalls(fetchMock)).toHaveLength(1);
+      expect(relayCallsTo(fetchMock, 'requirements')).toHaveLength(1);
 
       await GET(new Request(url(), { headers: { 'PAYMENT-SIGNATURE': '' } }));
       expect(discoveryCalls(fetchMock)).toHaveLength(2);
+      expect(relayCallsTo(fetchMock, 'requirements')).toHaveLength(2);
     });
 
-    it('keeps refreshing the USDC face every 5 minutes while unpaid requests reuse the listing', async () => {
+    it('does not refetch the USDC face for unpaid requests within 30 minutes and refetches at 30 minutes', async () => {
+      const now = vi.spyOn(Date, 'now').mockReturnValue(T0);
+      fetchMock = fetchFor({ usdc: true });
+      vi.stubGlobal('fetch', fetchMock);
+
+      await GET(new Request(url()));
+      now.mockReturnValue(T0 + 30 * MIN - 1);
+      const res = await GET(new Request(url()));
+      expect(res.status).toBe(402);
+      expect(res.headers.get('PAYMENT-REQUIRED')).toBe(paymentRequiredHeader);
+      expect(relayCallsTo(fetchMock, 'requirements')).toHaveLength(1);
+
+      now.mockReturnValue(T0 + 30 * MIN);
+      await GET(new Request(url()));
+      expect(relayCallsTo(fetchMock, 'requirements')).toHaveLength(2);
+    });
+
+    function usdcFaceFor(amount: string) {
+      const v1Accepts = { ...usdcAccept, maxAmountRequired: amount };
+      const v2 = { ...v2Accept, amount };
+      const header = Buffer.from(JSON.stringify({
+        x402Version: 2, resource: { url: resource }, accepts: [v2],
+      })).toString('base64');
+      return { resourceId, v1Accepts, v2Accept: v2, paymentRequiredHeader: header };
+    }
+
+    it('relays USDC payments with fresh terms while unpaid 402s may still show the cached ones', async () => {
+      const now = vi.spyOn(Date, 'now').mockReturnValue(T0);
+      const state: FacilitatorState = { usdc: true };
+      fetchMock = fetchFor(state);
+      vi.stubGlobal('fetch', fetchMock);
+      const repriced = usdcFaceFor('2000000');
+      const usdcAmount = async (res: Response) =>
+        ((await res.json()) as { accepts: { maxAmountRequired: string }[] }).accepts[1].maxAmountRequired;
+
+      await GET(new Request(url()));
+      state.requirements = repriced;
+      now.mockReturnValue(T0 + 10 * MIN);
+
+      const probe = await GET(new Request(url()));
+      expect(await usdcAmount(probe)).toBe(usdcAccept.maxAmountRequired);
+      expect(probe.headers.get('PAYMENT-REQUIRED')).toBe(paymentRequiredHeader);
+      expect(relayCallsTo(fetchMock, 'requirements')).toHaveLength(1);
+
+      const paid = await GET(new Request(url(), { headers: { 'PAYMENT-SIGNATURE': 'signature' } }));
+      expect(paid.status).toBe(200);
+      expect(relayCallsTo(fetchMock, 'requirements')).toHaveLength(2);
+      for (const endpoint of ['verify', 'settle'] as const) {
+        const calls = relayCallsTo(fetchMock, endpoint);
+        expect(calls).toHaveLength(1);
+        const body = JSON.parse(String((calls[0][1] as RequestInit).body)) as {
+          paymentRequirements: { maxAmountRequired: string };
+        };
+        expect(body.paymentRequirements.maxAmountRequired).toBe('2000000');
+      }
+
+      const afterPayment = await GET(new Request(url()));
+      expect(await usdcAmount(afterPayment)).toBe('2000000');
+      expect(afterPayment.headers.get('PAYMENT-REQUIRED')).toBe(repriced.paymentRequiredHeader);
+      expect(relayCallsTo(fetchMock, 'requirements')).toHaveLength(2);
+    });
+
+    it('stops a USDC payment during a relay outage without charging, while unpaid 402s keep the validated face', async () => {
+      const now = vi.spyOn(Date, 'now').mockReturnValue(T0);
+      const state: FacilitatorState = { usdc: true };
+      fetchMock = fetchFor(state);
+      vi.stubGlobal('fetch', fetchMock);
+
+      await GET(new Request(url()));
+      now.mockReturnValue(T0 + 10 * MIN);
+      state.requirementsStatus = 503;
+
+      const paid = await GET(new Request(url(), { headers: { 'PAYMENT-SIGNATURE': 'signature' } }));
+      expect(paid.status).toBe(402);
+      expect(paid.headers.get('PAYMENT-REQUIRED')).toBeNull();
+      const body = (await paid.json()) as { accepts: unknown[]; error: string };
+      expect(body.error).toBe('payment_invalid');
+      expect(body.accepts).toHaveLength(1);
+      expect(relayCallsTo(fetchMock, 'verify')).toHaveLength(0);
+      expect(relayCallsTo(fetchMock, 'settle')).toHaveLength(0);
+      expect(relayCallsTo(fetchMock, 'requirements')).toHaveLength(2);
+
+      now.mockReturnValue(T0 + 11 * MIN);
+      const probe = await GET(new Request(url()));
+      expect(probe.headers.get('PAYMENT-REQUIRED')).toBe(paymentRequiredHeader);
+      expect(((await probe.json()) as { accepts: unknown[] }).accepts).toHaveLength(2);
+      expect(relayCallsTo(fetchMock, 'requirements')).toHaveLength(2);
+    });
+
+    it('drops the cached USDC face when the relay reports it gone (404)', async () => {
+      const now = vi.spyOn(Date, 'now').mockReturnValue(T0);
+      const state: FacilitatorState = { usdc: true };
+      fetchMock = fetchFor(state);
+      vi.stubGlobal('fetch', fetchMock);
+
+      await GET(new Request(url()));
+      now.mockReturnValue(T0 + 10 * MIN);
+      state.requirementsStatus = 404;
+      expect((await GET(new Request(url(), { headers: { 'PAYMENT-SIGNATURE': 'signature' } }))).status).toBe(402);
+
+      now.mockReturnValue(T0 + 11 * MIN);
+      const probe = await GET(new Request(url()));
+      expect(probe.headers.get('PAYMENT-REQUIRED')).toBeNull();
+      expect(((await probe.json()) as { accepts: unknown[] }).accepts).toHaveLength(1);
+      expect(relayCallsTo(fetchMock, 'requirements')).toHaveLength(3);
+    });
+
+    it('revalidates the USDC recipient pin on every unpaid cache hit', async () => {
       const now = vi.spyOn(Date, 'now').mockReturnValue(T0);
       fetchMock = fetchFor({ usdc: true });
       vi.stubGlobal('fetch', fetchMock);
 
       await GET(new Request(url()));
       now.mockReturnValue(T0 + 10 * MIN);
+      vi.stubEnv('EXPECTED_USDC_RECIPIENT', attacker);
       const res = await GET(new Request(url()));
 
-      expect(res.status).toBe(402);
-      expect(relayCallsTo(fetchMock, 'requirements')).toHaveLength(2);
-      expect(discoveryCalls(fetchMock)).toHaveLength(1);
+      expect(res.status).toBe(500);
+      expect(await res.json()).toEqual({ error: 'accepts_unavailable' });
+      expect(relayCallsTo(fetchMock, 'requirements')).toHaveLength(1);
     });
 
     it('fails a paid request closed when the refetch fails and keeps the validated listing for unpaid 402s', async () => {
