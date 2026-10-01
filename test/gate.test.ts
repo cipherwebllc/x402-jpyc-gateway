@@ -241,6 +241,96 @@ describe('pinned discovery', () => {
     });
   });
 
+  describe('concurrent discovery fetches', () => {
+    const T0 = 1_000_000;
+    const MIN = 60_000;
+    const repriced = {
+      ...listing,
+      accepts: [{ ...catalogAccept, maxAmountRequired: '2010000000000000000' }],
+    };
+
+    function deferredFetch() {
+      const pending: Array<(res: Response) => void> = [];
+      const fetchMock = vi.fn(() => new Promise<Response>((resolve) => pending.push(resolve)));
+      vi.stubGlobal('fetch', fetchMock);
+      return { fetchMock, pending };
+    }
+
+    it('does not let an older success reinstall a listing that a newer fetch found deleted (404)', async () => {
+      const { fetchMock, pending } = deferredFetch();
+      const older = acceptsFor(resource, { forPayment: false });
+      const newer = acceptsFor(resource, { forPayment: false });
+      expect(pending).toHaveLength(2);
+
+      pending[1](response({ error: 'not_found' }, 404));
+      await expect(newer).rejects.toThrow('HTTP 404');
+      pending[0](response(listing));
+      await expect(older).rejects.toThrow('superseded');
+
+      const next = acceptsFor(resource, { forPayment: false });
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+      pending[2](response(listing));
+      await expect(next).resolves.toEqual([catalogAccept]);
+    });
+
+    it('does not let an older 404 erase a listing that a newer fetch already cached', async () => {
+      const { fetchMock, pending } = deferredFetch();
+      const older = acceptsFor(resource, { forPayment: false });
+      const newer = acceptsFor(resource, { forPayment: false });
+
+      pending[1](response(listing));
+      await expect(newer).resolves.toEqual([catalogAccept]);
+      pending[0](response({ error: 'not_found' }, 404));
+      await expect(older).rejects.toThrow('HTTP 404');
+
+      await expect(acceptsFor(resource, { forPayment: false })).resolves.toEqual([catalogAccept]);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not let a slow older response overwrite newer terms', async () => {
+      const { fetchMock, pending } = deferredFetch();
+      const older = acceptsFor(resource);
+      const newer = acceptsFor(resource);
+
+      pending[1](response(repriced));
+      await expect(newer).resolves.toEqual(repriced.accepts);
+      pending[0](response(listing));
+      await expect(older).resolves.toEqual(repriced.accepts);
+
+      await expect(acceptsFor(resource)).resolves.toEqual(repriced.accepts);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
+    it('measures the listing age from the start of the fetch', async () => {
+      const now = vi.spyOn(Date, 'now').mockReturnValue(T0);
+      const { fetchMock, pending } = deferredFetch();
+      const first = acceptsFor(resource);
+      now.mockReturnValue(T0 + 4 * MIN);
+      pending[0](response(listing));
+      await first;
+
+      now.mockReturnValue(T0 + 5 * MIN);
+      const paid = acceptsFor(resource);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      pending[1](response(listing));
+      await paid;
+    });
+
+    it('rejects and does not cache a response that arrives after the payment age limit', async () => {
+      const now = vi.spyOn(Date, 'now').mockReturnValue(T0);
+      const { fetchMock, pending } = deferredFetch();
+      const slow = acceptsFor(resource);
+      now.mockReturnValue(T0 + 5 * MIN);
+      pending[0](response(listing));
+      await expect(slow).rejects.toThrow('too old');
+
+      const probe = acceptsFor(resource, { forPayment: false });
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      pending[1](response(listing));
+      await expect(probe).resolves.toEqual([catalogAccept]);
+    });
+  });
+
   it('cannot reuse cached requirements after the configured recipient changes', async () => {
     const fetchMock = vi.fn().mockResolvedValue(response(listing));
     vi.stubGlobal('fetch', fetchMock);

@@ -47,12 +47,16 @@ export type UsdcFace = {
 
 let acceptsCache: CatalogItem | null = null;
 let acceptsCachedAt = 0;
+// 並行する discovery 取得は「後から開始した取得」の結果だけを反映する (完了順は問わない)。
+let listingFetchSeq = 0;
+let listingAppliedSeq = 0;
 let usdcFaceCache: UsdcFace | null = null;
 let usdcFaceCachedAt = 0;
 
 export function resetAcceptsCache(): void {
   acceptsCache = null;
   acceptsCachedAt = 0;
+  listingAppliedSeq = listingFetchSeq;
 }
 
 export function resetUsdcFaceCache(): void {
@@ -98,6 +102,8 @@ async function myAccepts(maxAgeMs: number): Promise<PaymentRequirements[]> {
     validateJpycListing(acceptsCache, config);
     return acceptsCache.accepts;
   }
+  const seq = ++listingFetchSeq;
+  const startedAt = Date.now();
   let res: Response;
   try {
     res = await fetch(OPENPAY + '/api/discovery/' + encodeURIComponent(config.resourceId), {
@@ -108,7 +114,13 @@ async function myAccepts(maxAgeMs: number): Promise<PaymentRequirements[]> {
   }
   if (res.status === 404) {
     // 出品が消えた確定シグナル。購入できない出品の 402 をキャッシュから出し続けない。
-    resetAcceptsCache();
+    if (seq > listingAppliedSeq) {
+      listingAppliedSeq = seq;
+      if (acceptsCache?.id === config.resourceId) {
+        acceptsCache = null;
+        acceptsCachedAt = 0;
+      }
+    }
     rejectSellerRequirements('OpenPay listing not found or not public (HTTP 404)');
   }
   if (res.status >= 500) {
@@ -124,9 +136,22 @@ async function myAccepts(maxAgeMs: number): Promise<PaymentRequirements[]> {
     rejectSellerRequirements('invalid discovery response');
   }
   validateJpycListing(mine, config);
-  acceptsCache = mine; // 検証済みの掲載値のみをキャッシュ (支払いあり 5 分 / なし 30 分で使う)
-  acceptsCachedAt = Date.now();
-  return mine.accepts;
+  // 掲載値の年齢は取得の開始時刻から数える。応答が遅れた分だけ新しく見せない。
+  if (Date.now() - startedAt >= maxAgeMs) {
+    rejectSellerRequirements('OpenPay discovery response too old');
+  }
+  if (seq > listingAppliedSeq) {
+    listingAppliedSeq = seq;
+    acceptsCache = mine; // 検証済みの掲載値のみをキャッシュ (支払いあり 5 分 / なし 30 分で使う)
+    acceptsCachedAt = startedAt;
+    return mine.accepts;
+  }
+  // 後から開始した取得の結果が先に反映済み。古い応答ではなくそちらに従う。
+  if (acceptsCache?.id === config.resourceId) {
+    validateJpycListing(acceptsCache, config);
+    return acceptsCache.accepts;
+  }
+  rejectSellerRequirements('OpenPay listing superseded by a newer discovery result');
 }
 
 // resource だけをリクエスト URL (クエリ込み) に差し替えた accepts を返す。

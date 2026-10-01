@@ -702,9 +702,14 @@ describe('GET /api/consult', () => {
       expect(discoveryCalls(fetchMock)).toHaveLength(2);
     });
 
+    const usdcV1Header = Buffer.from(
+      JSON.stringify({ network: 'base', authorization: 'usdc-payment' }),
+    ).toString('base64');
+
     it.each([
-      ['X-PAYMENT', () => request()],
-      ['PAYMENT-SIGNATURE', () => new Request(url(), { headers: { 'PAYMENT-SIGNATURE': 'signature' } })],
+      ['JPYC X-PAYMENT', () => request()],
+      ['USDC v1 X-PAYMENT', () => request('?q=hello', usdcV1Header)],
+      ['USDC v2 PAYMENT-SIGNATURE', () => new Request(url(), { headers: { 'PAYMENT-SIGNATURE': 'signature' } })],
     ] as const)('reuses a listing under 5 minutes old for a %s payment and refetches at 5 minutes', async (_, paid) => {
       const now = vi.spyOn(Date, 'now').mockReturnValue(T0);
       fetchMock = fetchFor({ usdc: true });
@@ -738,6 +743,8 @@ describe('GET /api/consult', () => {
       const paid = await GET(request());
       expect(paid.status).toBe(200);
       expect(discoveryCalls(fetchMock)).toHaveLength(2);
+      expect(callsTo(fetchMock, 'verify')).toHaveLength(1);
+      expect(callsTo(fetchMock, 'settle')).toHaveLength(1);
       for (const endpoint of ['verify', 'settle'] as const) {
         const init = callsTo(fetchMock, endpoint)[0][1] as RequestInit;
         const body = JSON.parse(String(init.body)) as { paymentRequirements: { maxAmountRequired: string } };
