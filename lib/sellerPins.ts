@@ -27,6 +27,32 @@ function address(value: unknown): string | null {
     : null;
 }
 
+/** Structural equality for JSON values (object key order does not matter). */
+export function sameJson(a: unknown, b: unknown): boolean {
+  if (Object.is(a, b)) return true;
+  if (Array.isArray(a) || Array.isArray(b)) {
+    return Array.isArray(a) && Array.isArray(b) && a.length === b.length &&
+      a.every((item, i) => sameJson(item, b[i]));
+  }
+  const ra = record(a);
+  const rb = record(b);
+  if (!ra || !rb) return false;
+  const keys = Object.keys(ra).sort();
+  return sameJson(keys, Object.keys(rb).sort()) && keys.every((key) => sameJson(ra[key], rb[key]));
+}
+
+// Arc (Circle Gateway) pins: the Arc network paired with the Base network of the USDC face,
+// and the Gateway Wallet that buyers sign for (EIP-712 domain GatewayWalletBatched / 1).
+const ARC_BY_BASE_NETWORK: Record<string, { network: string; gatewayWallet: string }> = {
+  'eip155:8453': { network: 'eip155:5042', gatewayWallet: '0x77777777Dcc4d5A8B6E418Fd04D8997ef11000eE' },
+  'eip155:84532': { network: 'eip155:5042002', gatewayWallet: '0x0077777d7EBA4688BDeF3E311b846F25870A19B9' },
+};
+export const ARC_NETWORKS = ['eip155:5042', 'eip155:5042002'];
+const ARC_USDC = '0x3600000000000000000000000000000000000000';
+// Gateway rejects authorizations valid for less than 3 days; OpenPay uses 604900 seconds.
+const ARC_MIN_TIMEOUT_SECONDS = 3 * 24 * 60 * 60;
+const ARC_MAX_TIMEOUT_SECONDS = 8 * 24 * 60 * 60;
+
 const BURN_RECIPIENTS = new Set([
   '0x0000000000000000000000000000000000000000',
   '0x000000000000000000000000000000000000dead',
@@ -137,4 +163,44 @@ export function validateUsdcFace(value: unknown, config: SellerConfig): asserts 
       rejectSellerRequirements('USDC requirements mismatch');
     }
   }
+}
+
+/**
+ * Checks the optional Arc face of a USDC face that already passed validateUsdcFace.
+ * Money terms (recipient, network, asset, amount, the header's accepts) throw like the Base
+ * face. Signing-domain terms return a reason instead: a wrong Gateway Wallet only makes the
+ * buyer's signature invalid, so the caller drops the Arc face and keeps Base and JPYC selling.
+ */
+export function arcFaceProblem(face: UsdcFace, config: SellerConfig): string | null {
+  const arc = record(face.arc);
+  const accept = record(arc?.v2Accept);
+  const pair = ARC_BY_BASE_NETWORK[String(face.v2Accept.network)];
+  if (!accept || !pair || accept.scheme !== 'exact' || accept.network !== pair.network ||
+      address(accept.asset) !== ARC_USDC ||
+      accept.amount !== face.v1Accepts.maxAmountRequired ||
+      address(accept.payTo) !== address(config.expectedUsdcRecipient)) {
+    rejectSellerRequirements('Arc requirements mismatch');
+  }
+  const header = record(typeof arc?.paymentRequiredHeader === 'string'
+    ? decodePaymentHeader(arc.paymentRequiredHeader) : undefined);
+  if (!Array.isArray(header?.accepts) || header.accepts.length !== 2 ||
+      !sameJson(header.accepts[0], face.v2Accept) || !sameJson(header.accepts[1], accept)) {
+    rejectSellerRequirements('Arc header mismatch');
+  }
+  const extra = record(accept.extra);
+  if (extra?.name !== 'GatewayWalletBatched' || extra.version !== '1' ||
+      address(extra.verifyingContract) !== address(pair.gatewayWallet)) {
+    return 'Arc signing domain mismatch';
+  }
+  const timeout = accept.maxTimeoutSeconds;
+  if (typeof timeout !== 'number' || !Number.isInteger(timeout) ||
+      timeout < ARC_MIN_TIMEOUT_SECONDS || timeout > ARC_MAX_TIMEOUT_SECONDS) {
+    return 'Arc payment timeout out of range';
+  }
+  const arcMeta = { ...header };
+  const baseMeta = { ...record(decodePaymentHeader(face.paymentRequiredHeader)) };
+  delete arcMeta.accepts;
+  delete baseMeta.accepts;
+  if (!sameJson(arcMeta, baseMeta)) return 'Arc header metadata mismatch';
+  return null;
 }
