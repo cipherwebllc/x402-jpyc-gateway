@@ -6,7 +6,9 @@
 //   2. verify と settle を分離して公開する (買い手保護の処理順を route 側で組むため)
 
 import {
+  arcFaceProblem,
   rejectSellerRequirements,
+  sameJson,
   sellerConfig,
   validateJpycListing,
   validateJpycRequirements,
@@ -14,7 +16,8 @@ import {
   type CatalogItem,
   type SellerConfig,
 } from './sellerPins';
-export { decodePaymentHeader } from './paymentHeader';
+import { decodePaymentHeader } from './paymentHeader';
+export { decodePaymentHeader };
 
 const OPENPAY = 'https://open-pay.jp';
 // discovery と relay/requirements は OpenPay 側の KV を消費するため、402 を返すだけの
@@ -44,8 +47,42 @@ export type UsdcFace = {
   v1Accepts: PaymentRequirements;
   v2Accept: PaymentRequirements;
   paymentRequiredHeader: string;
+  /** Arc (Circle Gateway) face: v2 only. The header lists Base then Arc, built by the relay. */
+  arc?: { v2Accept: PaymentRequirements; paymentRequiredHeader: string };
   [key: string]: unknown;
 };
+
+export type UsdcRail = 'base' | 'arc';
+
+// Returns the face to serve: Arc money mismatches throw (both rails stop, like the Base face);
+// Arc signing-domain mismatches drop only the Arc face, logged once per reason.
+function servedUsdcFace(face: UsdcFace, config: SellerConfig): UsdcFace {
+  if (face.arc === undefined) return face;
+  const problem = arcFaceProblem(face, config);
+  if (problem === null) return face;
+  if (!loggedArcProblems.has(problem)) {
+    loggedArcProblems.add(problem);
+    // Only caller-defined reasons: never log remote bodies, wallets, URLs, or payment data.
+    console.error(`[openpay-x402] ${problem}; Arc face disabled`);
+  }
+  const served = { ...face };
+  delete served.arc;
+  return served;
+}
+
+/** The PAYMENT-REQUIRED header to send: Base + Arc when the Arc face is served, else Base only. */
+export function paymentRequiredHeaderFor(face: UsdcFace | null): string | undefined {
+  return face?.arc?.paymentRequiredHeader ?? face?.paymentRequiredHeader;
+}
+
+/** True only when the buyer's v2 payment accepted exactly the served Arc terms. */
+export function isArcPayment(face: UsdcFace, paymentSignatureHeader: string): boolean {
+  if (!face.arc) return false;
+  const payload = decodePaymentHeader(paymentSignatureHeader);
+  const accepted = typeof payload === 'object' && payload !== null
+    ? (payload as { accepted?: unknown }).accepted : undefined;
+  return sameJson(accepted, face.arc.v2Accept);
+}
 
 let acceptsCache: CatalogItem | null = null;
 let acceptsCachedAt = 0;
@@ -53,6 +90,8 @@ let acceptsCachedAt = 0;
 let listingFetchSeq = 0;
 let listingAppliedSeq = 0;
 let usdcFaceCache: UsdcFace | null = null;
+// Arc problems already logged, so a dropped Arc face does not log on every request.
+const loggedArcProblems = new Set<string>();
 let usdcFaceCachedAt = 0;
 let usdcFetchSeq = 0;
 let usdcAppliedSeq = 0;
@@ -67,6 +106,7 @@ export function resetUsdcFaceCache(): void {
   usdcFaceCache = null;
   usdcFaceCachedAt = 0;
   usdcAppliedSeq = usdcFetchSeq;
+  loggedArcProblems.clear();
 }
 
 function cachedUsdcFace(resourceId: string, maxAgeMs: number, config: SellerConfig): UsdcFace | null {
@@ -74,7 +114,7 @@ function cachedUsdcFace(resourceId: string, maxAgeMs: number, config: SellerConf
     return null;
   }
   validateUsdcFace(usdcFaceCache, config);
-  return structuredClone(usdcFaceCache);
+  return servedUsdcFace(structuredClone(usdcFaceCache), config);
 }
 
 // forPayment を省略したときは支払い扱い (厳しい側の 5 分) にする。
@@ -113,12 +153,13 @@ export async function usdcFace(options: { forPayment?: boolean } = {}): Promise<
   }
   // Trust failures must stop both rails, outside the availability fallback above.
   validateUsdcFace(value, config);
+  const served = servedUsdcFace(structuredClone(value), config);
   if (Date.now() - startedAt >= maxAgeMs) return null;
   if (seq > usdcAppliedSeq) {
     usdcAppliedSeq = seq;
     usdcFaceCache = value;
     usdcFaceCachedAt = startedAt;
-    return structuredClone(value);
+    return served;
   }
   // 後から開始した取得の結果が先に反映済み。古い応答ではなくそちらに従う。
   return cachedUsdcFace(resourceId, maxAgeMs, config);
@@ -247,13 +288,18 @@ export function relayPayment(
   headers: { paymentHeader?: string; paymentSignatureHeader?: string },
   face: UsdcFace,
   jpycAccepts: PaymentRequirements[],
+  rail: UsdcRail = 'base',
 ): Promise<Record<string, unknown> | Response> {
   const config = sellerConfig();
   validateUsdcFace(face, config);
-  // Bind the relay to this request's validated terms, including during settlement.
+  if (rail === 'arc' && (!face.arc || arcFaceProblem(face, config) !== null)) {
+    rejectSellerRequirements('Arc face unavailable');
+  }
+  // Bind the relay to this request's validated terms, including during settlement. The pin's
+  // shape names the rail; the relay answers 409 if the payment was made on another rail.
   const body = JSON.stringify({
     resourceId: config.resourceId,
-    paymentRequirements: face.v1Accepts,
+    paymentRequirements: rail === 'arc' ? face.arc!.v2Accept : face.v1Accepts,
     ...headers,
   });
   return fetch(OPENPAY + '/api/x402/relay/' + path, {
@@ -266,7 +312,7 @@ export function relayPayment(
       // Re-pin changed terms and ask the buyer again without replaying the payment.
       const fresh = await usdcFace({ forPayment: true });
       if (!fresh) rejectSellerRequirements('OpenPay USDC requirements unavailable');
-      return json402([...jpycAccepts, fresh.v1Accepts], 'requirements_mismatch', fresh.paymentRequiredHeader);
+      return json402([...jpycAccepts, fresh.v1Accepts], 'requirements_mismatch', paymentRequiredHeaderFor(fresh));
     }
     return r.json();
   });

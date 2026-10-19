@@ -621,3 +621,151 @@ USDC 面を無効にすると、支払いなしリクエストのたびに requi
   状態なので課金はなく、再試行すれば新しい条件の 402 が返る (fail-closed)。「reset は進行中の取得も無効化する」
   の代償で、対案 (無効化しない) は 409 を起こした旧条件の書き戻しを許すため採らない。
 - 「404 は KV を消費する」は OpenPay 側の実装 (リレーは rate limit とレジストリ参照で KV を使う) に基づく想定。
+
+## 17. Arc (Circle Gateway) を第三者向け relay とゲートウェイに追加 (2026-10-20)
+
+目的: OpenPay 本体の first-party 有料 API は Arc (Circle の L1) の USDC を「2 本目の USDC x402 レール」として
+受け付けている (Circle Gateway x402 facilitator・`eip155:5042`・flag `ENABLE_X402_ARC_GATEWAY`)。
+第三者向けの dual-rail relay (OpenPay `/api/x402/relay/*`) と、このゲートウェイにも Arc を入れる。
+2 リポジトリにまたがる: **OpenPay 本体 (relay)** と **x402-jpyc-gateway (ゲートウェイ)**。
+SDK (`openpay-x402-sdk` の dualGate) の Arc 対応は npm 公開を伴うので今回は範囲外 (Base のみで動き続ける)。
+
+### 前提 (調査で確認した事実)
+- Arc は x402 **v2 のみ**。network は CAIP-2 (`eip155:5042` mainnet / `eip155:5042002` testnet)。scheme は
+  `exact` だが、EIP-712 domain が USDC 本体ではなく `GatewayWalletBatched` / version `1` /
+  verifyingContract = Gateway Wallet (mainnet `0x77777777Dcc4d5A8B6E418Fd04D8997ef11000eE` /
+  testnet `0x0077777d7EBA4688BDeF3E311b846F25870A19B9`)。asset は `0x3600…0000` (6 桁)。
+  `maxTimeoutSeconds` は 604900 (Gateway は 3 日未満の authorization を拒否)。
+- 買い手は事前に Gateway Wallet へ USDC を入金しておく必要がある (以降はガス不要)。
+- 売り手の売上は**受取アドレスの Gateway 残高**に入り、withdraw して初めて手元に来る (Base は直接着金)。
+- settle はバッチ。`transaction` は tx ハッシュではなく Gateway の UUID。
+- CDP / payai は Arc を settle できない。CDP Bazaar に Arc で載る保証はない (Base 側の掲載はそのまま)。
+- **Gateway の verify は使用済みの nonce を `isValid:true` で通す** (OpenPay 実測 2026-09-17)。settle は
+  `nonce_already_used` で失敗する。
+- OpenPay 本体には Arc の accept 生成 (`buildAccepts` の arc)・rail 判定 (`v2HeaderToRailBody`)・Gateway への
+  送信 (`postGatewayFacilitator` / `postFacilitatorWithStatus(..., 'arc-gateway')`) がすでにある。
+  relay (`dualRailRelay.ts`) はそれらを使っておらず、Base (CDP) 固定。
+
+### 不変条件 (両リポジトリ共通)
+1. **Base 経路は 1 バイトも変えない** (relay の requirements の既存フィールド・verify/settle の Base 分岐・
+   ゲートウェイの Base レール)。今動いているゲートウェイと SDK 0.6+ がそのまま動き続けること。
+2. Arc は**出品者のオプトイン**かつ **OpenPay の relay 用 flag ON** のときだけ出る (既定 OFF で完全に無効)。
+3. お金の項目 (payTo / amount / asset / network / verifyingContract) は relay が登録値から決定的に作る。
+   ゲートウェイはそれを pin で検証するだけで、手で組まない。
+4. Arc でも verify → 上流 → settle の順。`isValid === true` / `success === true` 以外は解錠しない。
+5. 使用済みの Arc 署名を使い回して上流を何度も呼ばせることを防ぐ (下記 R4)。
+
+### OpenPay 本体 (relay) の変更
+- R1 **flag と出品のオプトイン**:
+  - 新しい server-only flag `ENABLE_X402_DUAL_RAIL_ARC` (既定 OFF・`'1'`/`'true'` のみ ON)。
+  - Arc を出す条件 = `ENABLE_X402_DUAL_RAIL_ARC` ON **かつ** `x402Config.arcGateway.enabled`
+    (既存 `ENABLE_X402_ARC_GATEWAY`・network は `X402_NETWORK` に追従) **かつ** 出品の `usdc.arc === true`。
+  - レジストリ `X402ResourceUsdc` に `arc?: boolean` を追加 (検証・Lua CAS 更新・owner API)。受取先は
+    `usdc.payTo` を共用する (Gateway 残高はアドレス単位・first-party と同じ方針)。
+  - 出品フォームに「Arc (Circle Gateway) でも販売する」チェックを追加。公開 flag
+    (`NEXT_PUBLIC_ENABLE_X402_DUAL_RAIL_ARC_UI`) が ON のときだけ表示。説明文に「売上は Gateway 残高に入り
+    withdraw が必要」「買い手は Gateway Wallet への事前入金が必要」を書く。
+- R2 **requirements 応答** (既存フィールドは不変・追加のみ):
+  ```
+  { resourceId, v1Accepts, v2Accept, paymentRequiredHeader,      // 既存 (Base のみ) — 変えない
+    arc?: {                                                       // Arc 有効時だけ
+      v2Accept,              // Arc の v2 accept (first-party と同じ生成規則)
+      paymentRequiredHeader  // 完成形の v2 PAYMENT-REQUIRED: accepts = [Base v2Accept, Arc v2Accept] + bazaar 拡張
+    } }
+  ```
+  旧クライアントは `arc` を無視して従来どおり動く。新クライアントは 402 のヘッダを
+  `arc.paymentRequiredHeader` に差し替える (組み立てさせない = ドリフト防止)。v1 body には Arc を載せない。
+  Arc accept の生成は first-party の `buildAccepts` の Arc 部分を共有関数に切り出して再利用する。
+- R3 **verify / settle の振り分け**:
+  - v2 `PAYMENT-SIGNATURE` の `accepted` を `[Base, Arc]` で照合する rail 付きの復号を新しく公開する
+    (`decodeVanillaPaymentHeader` は変えない)。Arc 一致 → `postFacilitatorWithStatus(..., 'arc-gateway')`
+    で Gateway へ (認証なし・v2 wire・掲載メタは載せない)。`postFacilitator` の公開シグネチャは変えない。
+  - `paymentRequirements` の pin 照合は rail ごと: Base は従来の 5 項目、Arc は relay 自身の Arc v2 accept と
+    **完全一致** (不一致は 409 `requirements_mismatch`)。
+  - Arc の settle 成功時、台帳の network は Gateway のエコーではなくローカルの CAIP-2 に固定
+    (first-party と同じ)。`transaction` は UUID のまま記録。
+- R4 **使用済み署名の使い回し防止 (Arc のみ・KV)**:
+  - authorization (network + from + nonce) から識別子を作る (first-party の `vanillaPaymentIdentity` 系を再利用)。
+  - verify: KV に「決済済み」の印があれば Gateway を呼ばずに `{isValid:false, invalidReason:'authorization_already_used'}`。
+    Gateway の verify が `isValid:true` なら「処理中」の印を SET NX (TTL 15 分)。NX に失敗したら同じく
+    `authorization_already_used` (同じ署名の同時投入)。
+  - settle: `success:true` → 印を「決済済み」に上書き (TTL 604900 秒 = 署名の有効期間)。`success:false` →
+    印を消す (同じ署名で再試行できる)。例外 (判定なし) → 印を残す。
+  - KV 障害・未構成は fail-open (警告のみ・決済本体に波及させない。first-party の claim と同じ方針)。
+  - 理由: Gateway の verify は使用済み nonce を通すので、印が無いと 1 回分の支払いの署名を何度でも投げて
+    ゲートウェイの上流 (LLM) を呼ばせられる (settle で止まるので二重課金にはならないが、上流コストの増幅)。
+    relay の rate limit はゲートウェイのサーバー IP 単位で、買い手単位の歯止めにならない。
+- R5 docs: `docs/ENV.md` に新 flag 2 つ、`docs/DEPLOY_CHECKLIST.md` に第三者 Arc の go-live 手順。
+  **go-live の前提: 開示 3 点セット (LP FAQ・利用規約・llms.txt) の第三者 Arc 版の同期** (first-party と同じ扱い・
+  文言はユーザー判断)。コードは flag OFF で無効のまま出す。
+
+### ゲートウェイの変更
+- G1 `UsdcFace` に `arc?: { v2Accept, paymentRequiredHeader }` を追加。2 段 TTL のキャッシュはそのまま
+  (Arc も同じ face の一部)。
+- G2 `validateUsdcFace` で `arc` があれば pin 検証 (不一致は既存どおり throw = 両レール停止):
+  - `payTo` = `EXPECTED_USDC_RECIPIENT` (Base と共用)
+  - network = Base の network に対応する Arc (`eip155:8453`→`eip155:5042` / `eip155:84532`→`eip155:5042002`)
+  - asset = `0x3600…0000`、scheme = `exact`、amount = Base の `maxAmountRequired` (同じ USD 価格)
+  - extra = `{ name: 'GatewayWalletBatched', version: '1', verifyingContract: <その network の Gateway Wallet> }`
+    (Gateway Wallet のアドレスはゲートウェイ側の定数で pin。署名先のコントラクトを差し替えさせない)
+  - `maxTimeoutSeconds` は 3 日以上 8 日以下の整数
+  - `arc.paymentRequiredHeader` を復号し、`accepts` が `[face.v2Accept, arc.v2Accept]` と完全一致
+- G3 402: ヘッダは `arc.paymentRequiredHeader ?? paymentRequiredHeader`。v1 body (accepts) は従来どおり
+  `[JPYC, Base USDC]` (Arc は v2 のみ)。409 経路の 402 も同じ。
+- G4 rail 判定: `PAYMENT-SIGNATURE` を復号し、`accepted` が `arc.v2Accept` と完全一致すれば Arc レール。
+  それ以外は従来どおり Base レール (復号できない値も従来どおり relay に渡す)。v1 `X-PAYMENT` は常に Base / JPYC。
+- G5 `relayPayment` に rail を渡し、Arc なら `paymentRequirements: arc.v2Accept` を送る。Base は従来どおり。
+- G6 Arc の 200 には `X-PAYMENT-RESPONSE` に加えて v2 の `PAYMENT-RESPONSE` も付ける (Arc の買い手は v2)。
+  Base の応答は変えない。
+- G7 README / .env.example: Arc は OpenPay 側の出品設定 (オプトイン) で有効になり、ゲートウェイ側の追加設定は
+  不要。売上は Gateway 残高 (withdraw が必要)、買い手は事前入金が必要、Bazaar 掲載は Base 側。
+
+### 段階投入
+relay を先に出す (Arc は flag OFF で無効・既存クライアントは `arc` を無視) → ゲートウェイを出す (relay が `arc` を
+返すまで何も変わらない) → OpenPay で flag ON + 公式出品をオプトイン → Arc testnet / mainnet で実購入を確認。
+
+### テスト方針
+- relay: flag / オプトインの組み合わせごとの requirements (Arc 無し時は既存と byte 一致)、Arc の
+  PAYMENT-SIGNATURE → Gateway へ (CDP は呼ばない)・Base は CDP のまま、Arc pin の不一致 → 409、
+  R4 の印 (決済済み・処理中・settle 失敗で解除・KV 障害で fail-open)、台帳の network 固定、掲載メタを Gateway へ
+  送らない、v1 X-PAYMENT は Arc にならない。
+- ゲートウェイ: G2 の各 pin の不一致で throw、Arc 無しの face は従来と同じ 402、Arc ありの 402 ヘッダ差し替え、
+  Arc レールの relay 送信内容 (`paymentRequirements` = arc.v2Accept)、Base レール不変、409 経路、
+  `PAYMENT-RESPONSE`、2 段 TTL が Arc にも効く。
+
+### 計画レビュー裁定 (Fable 5.1, 2026-10-20) — 以下が §17 の確定版 (全件採用)
+
+1. **relay の pin と rail の整合 (major)**: pin 照合はヘッダ復号より前 (現行の位置) で行い、pin の rail は
+   **pin の形**で決める — `maxAmountRequired` を持つ v1 形 = Base (従来の 5 項目)、`amount` を持つ v2 形 = Arc
+   (relay 自身の Arc v2 accept と構造的に完全一致・Arc 無効時は必ず不一致)。不一致は 409。そのあと復号した
+   rail が pin の rail と違えば **409** (`requirements_mismatch`)。pin 無しの呼び出しは従来どおり rail を問わない。
+   → ゲートウェイの face が古い (Arc を知らない) まま Arc で払われた場合も 409 → 再取得 → Arc 入りの 402 で回復
+   し、ゲートウェイが検証していない条件で売ることがない。SDK 出品者は Base pin しか送らないので、オプトイン
+   しても Arc ヘッダは 409 になり Base のみで動き続ける。
+2. **ゲートウェイ G2 の分割 (major)**: 金銭項目 (payTo / network 対応 / asset / scheme / amount = Base 額 /
+   ヘッダの accepts 一致) の不一致は従来どおり throw (両レール停止)。**署名ドメイン項目** (extra.name /
+   version / verifyingContract・maxTimeoutSeconds の範囲) の不一致は**固定理由をログして `arc` を落とし、
+   Base のヘッダで続ける** (署名先が本物の Gateway Wallet でなければ署名は無効で売り手に損失は無い。
+   Circle の Gateway Wallet 更新で全ゲートウェイの JPYC まで止まる爆発半径を避ける)。
+3. **R4 の細部**:
+   - settle が `success:false` でも `errorReason === 'nonce_already_used'` なら印を「決済済み」で固定 (消さない)。
+   - KV キーは first-party と別の prefix (`x402:relay:arc:`)・別 record (`pending` / `settled`)。settle 失敗時の
+     削除は Lua CAS で「pending のときだけ DEL」。
+   - 識別子は (network, from, nonce) だけ (署名は使わない = malleability に強い)。from / nonce が読めない
+     Arc payload は 400 `invalid_payment_payload` (Gateway も拒否する値)。
+   - reason を分ける: 処理中 = `authorization_in_use`、決済済み = `authorization_already_used`。
+   - fail-open は維持するが、KV 障害中は使い回し防止が効かないことを ENV.md / DEPLOY_CHECKLIST に明記。
+4. **受取先 (major)**: Arc の受取先は `usdc.payTo` を共用するが、**EOA であること**が条件 (Gateway 残高の
+   引き出しは受取アドレスの EIP-712 署名)。出品フォームと開示に明記し、Circle の引き出し署名の制約
+   (ERC-1271 の可否) は go-live 前に一次資料で確認する項目にする。フォームには「SDK
+   (`openpay-x402-sdk`) で動く出品は Arc を提示しない (x402-jpyc-gateway 版が必要)」も書く。
+5. minor:
+   - deep-equal はキー順に依存しない構造比較 (JSON 文字列比較は不可)。
+   - ゲートウェイの 402 ヘッダの選択は helper 1 つに集約し、全経路 (402 各所 + 409 経路) をテストで固定。
+   - v1 `X-PAYMENT` の network が Arc (`eip155:5042` / `5042002`) なら 402 `payment_invalid` (facilitator を呼ばない)。
+   - relay は Arc の settle 応答の `network` もローカル CAIP-2 に固定して返す (台帳だけでなく応答も)。
+   - ゲートウェイは `arc.paymentRequiredHeader` の accepts 以外 (resource / extensions / error / x402Version) が
+     Base ヘッダと一致することも検査する (不一致は金銭ではないので Arc を落とす扱い)。
+   - relay テスト: Arc ありでも既存 4 フィールドが Arc なしと byte 一致。Arc accept の payTo は出品の
+     `usdc.payTo` (first-party の payTo ではない)。
+   - Base v2 の応答は `X-PAYMENT-RESPONSE` のみ (既存) を README に明記。

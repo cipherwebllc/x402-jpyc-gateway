@@ -14,6 +14,7 @@ import {
   OPENPAY, resource, resourceId, merchant, usdcMerchant, attacker,
   catalogAccept, listing, paymentPayload, paymentHeader,
   paymentRequiredHeader, usdcAccept, usdcFace, v2Accept, response,
+  arcV2Accept, arcHeaderFor, arcPaymentRequiredHeader, usdcFaceWithArc, paymentSignatureFor,
 } from './fixtures';
 
 function url(path = '?q=hello'): string {
@@ -936,6 +937,162 @@ describe('GET /api/consult', () => {
       const probe = await GET(new Request(url()));
       expect(probe.status).toBe(500);
       expect(discoveryCalls(fetchMock)).toHaveLength(3);
+    });
+  });
+
+  describe('Arc (Circle Gateway) face', () => {
+    const arcPayment = () =>
+      new Request(url(), { headers: { 'PAYMENT-SIGNATURE': paymentSignatureFor(arcV2Accept) } });
+
+    function relayBody(endpoint: 'verify' | 'settle', i = 0): Record<string, unknown> {
+      return JSON.parse(String((relayCallsTo(fetchMock, endpoint)[i][1] as RequestInit).body));
+    }
+
+    function useFace(face: unknown, state: FacilitatorState = {}) {
+      fetchMock = fetchFor({ usdc: true, requirements: face, ...state });
+      vi.stubGlobal('fetch', fetchMock);
+    }
+
+    it('serves the Base + Arc header while keeping the v1 body to JPYC and Base USDC', async () => {
+      useFace(usdcFaceWithArc());
+      const res = await GET(new Request(url()));
+      const body = (await res.json()) as { accepts: unknown[] };
+
+      expect(res.status).toBe(402);
+      expect(res.headers.get('PAYMENT-REQUIRED')).toBe(arcPaymentRequiredHeader);
+      expect(body.accepts).toEqual([
+        { ...catalogAccept, resource: 'https://gateway.example.com/api/consult?q=hello' },
+        usdcAccept,
+      ]);
+    });
+
+    it('relays an Arc payment with the Arc pin and answers with both payment response headers', async () => {
+      useFace(usdcFaceWithArc());
+      const res = await GET(arcPayment());
+
+      expect(res.status).toBe(200);
+      for (const endpoint of ['verify', 'settle'] as const) {
+        expect(relayBody(endpoint)).toEqual({
+          resourceId,
+          paymentRequirements: arcV2Accept,
+          paymentSignatureHeader: paymentSignatureFor(arcV2Accept),
+        });
+      }
+      expect(res.headers.get('PAYMENT-RESPONSE')).toBe(res.headers.get('X-PAYMENT-RESPONSE'));
+      expect(res.headers.get('PAYMENT-RESPONSE')).not.toBeNull();
+      expect(callsTo(fetchMock, 'verify')).toHaveLength(0);
+    });
+
+    it('recognises the Arc terms regardless of key order', async () => {
+      useFace(usdcFaceWithArc());
+      const reordered = Object.fromEntries(Object.entries(arcV2Accept).reverse());
+      const res = await GET(new Request(url(), { headers: { 'PAYMENT-SIGNATURE': paymentSignatureFor(reordered) } }));
+      expect(res.status).toBe(200);
+      expect(relayBody('verify').paymentRequirements).toEqual(arcV2Accept);
+    });
+
+    it('keeps Base payments on the Base pin without PAYMENT-RESPONSE while Arc is served', async () => {
+      useFace(usdcFaceWithArc());
+      const res = await GET(new Request(url(), { headers: { 'PAYMENT-SIGNATURE': paymentSignatureFor(v2Accept) } }));
+      expect(res.status).toBe(200);
+      expect(relayBody('verify').paymentRequirements).toEqual(usdcAccept);
+      expect(res.headers.get('PAYMENT-RESPONSE')).toBeNull();
+    });
+
+    it('sends the Base pin for an Arc payment when the face does not serve Arc, so the relay refuses it', async () => {
+      useFace(usdcFace);
+      await GET(arcPayment());
+      expect(relayBody('verify').paymentRequirements).toEqual(usdcAccept);
+    });
+
+    it('rejects a v1 X-PAYMENT that names an Arc network without calling any facilitator', async () => {
+      useFace(usdcFaceWithArc());
+      const v1 = Buffer.from(JSON.stringify({ network: 'eip155:5042', authorization: 'x' })).toString('base64');
+      const res = await GET(request('?q=hello', v1));
+
+      expect(res.status).toBe(402);
+      expect((await res.json()) as { error: string }).toMatchObject({ error: 'payment_invalid' });
+      expect(res.headers.get('PAYMENT-REQUIRED')).toBe(arcPaymentRequiredHeader);
+      expect(relayCallsTo(fetchMock, 'verify')).toHaveLength(0);
+      expect(callsTo(fetchMock, 'verify')).toHaveLength(0);
+    });
+
+    it('passes the relay reason through and skips the adapter when a signature was already used', async () => {
+      useFace(usdcFaceWithArc(), { relayVerify: { isValid: false, invalidReason: 'authorization_already_used' } });
+      const res = await GET(arcPayment());
+
+      expect(res.status).toBe(402);
+      expect((await res.json()) as { error: string }).toMatchObject({ error: 'authorization_already_used' });
+      expect(res.headers.get('PAYMENT-REQUIRED')).toBe(arcPaymentRequiredHeader);
+      expect(adapter).not.toHaveBeenCalled();
+      expect(relayCallsTo(fetchMock, 'settle')).toHaveLength(0);
+    });
+
+    it('re-pins after a relay 409 and answers with the fresh Base + Arc header', async () => {
+      useFace(usdcFaceWithArc(), { relayVerifyStatus: 409, relayVerify: { error: 'requirements_mismatch' } });
+      const res = await GET(arcPayment());
+
+      expect(res.status).toBe(402);
+      expect((await res.json()) as { error: string }).toMatchObject({ error: 'requirements_mismatch' });
+      expect(res.headers.get('PAYMENT-REQUIRED')).toBe(arcPaymentRequiredHeader);
+      expect(relayCallsTo(fetchMock, 'requirements')).toHaveLength(2);
+    });
+
+    it.each([
+      ['a swapped signing contract', { ...arcV2Accept, extra: { ...arcV2Accept.extra, verifyingContract: attacker } }],
+      ['another signing domain name', { ...arcV2Accept, extra: { ...arcV2Accept.extra, name: 'USD Coin' } }],
+      ['a too short validity window', { ...arcV2Accept, maxTimeoutSeconds: 300 }],
+    ])('drops only the Arc face for %s and keeps selling on Base and JPYC', async (_, arcAccept) => {
+      const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+      useFace(usdcFaceWithArc(arcAccept));
+
+      const probe = await GET(new Request(url()));
+      expect(probe.status).toBe(402);
+      expect(probe.headers.get('PAYMENT-REQUIRED')).toBe(paymentRequiredHeader);
+
+      const paid = await GET(request());
+      expect(paid.status).toBe(200);
+      expect(errors.mock.calls.some(([line]) => String(line).includes('Arc face disabled'))).toBe(true);
+    });
+
+    it('drops only the Arc face when the Arc header metadata differs from the Base header', async () => {
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      useFace(usdcFaceWithArc(arcV2Accept, arcHeaderFor([v2Accept, arcV2Accept], { resource: { url: 'https://other.example' } })));
+      const probe = await GET(new Request(url()));
+      expect(probe.headers.get('PAYMENT-REQUIRED')).toBe(paymentRequiredHeader);
+    });
+
+    it.each([
+      ['an Arc recipient that is not the seller pin', { ...arcV2Accept, payTo: attacker }],
+      ['a different Arc price', { ...arcV2Accept, amount: '2000000' }],
+      ['another Arc asset', { ...arcV2Accept, asset: usdcAccept.asset }],
+      ['a Base network on the Arc face', { ...arcV2Accept, network: 'eip155:8453' }],
+    ])('stops both rails for %s', async (_, arcAccept) => {
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      useFace(usdcFaceWithArc(arcAccept));
+      const res = await GET(new Request(url()));
+      expect(res.status).toBe(500);
+      expect(await res.json()).toEqual({ error: 'accepts_unavailable' });
+    });
+
+    it.each([
+      ['lists only Arc', () => arcHeaderFor([arcV2Accept])],
+      ['lists Arc before Base', () => arcHeaderFor([arcV2Accept, v2Accept])],
+      ['lists different Arc terms', () => arcHeaderFor([v2Accept, { ...arcV2Accept, payTo: attacker }])],
+    ])('stops both rails when the Arc header %s', async (_, header) => {
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      useFace(usdcFaceWithArc(arcV2Accept, header()));
+      expect((await GET(new Request(url()))).status).toBe(500);
+    });
+
+    it('keeps the Arc face in the two-tier cache like the rest of the USDC face', async () => {
+      const now = vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
+      useFace(usdcFaceWithArc());
+      await GET(new Request(url()));
+      now.mockReturnValue(1_000_000 + 29 * 60_000);
+      const probe = await GET(new Request(url()));
+      expect(probe.headers.get('PAYMENT-REQUIRED')).toBe(arcPaymentRequiredHeader);
+      expect(relayCallsTo(fetchMock, 'requirements')).toHaveLength(1);
     });
   });
 });

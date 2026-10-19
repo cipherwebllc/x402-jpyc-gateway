@@ -62,3 +62,46 @@ export function response(body: unknown, status = 200): Response {
     headers: { 'content-type': 'application/json' },
   });
 }
+
+export const arcV2Accept = {
+  scheme: 'exact',
+  network: 'eip155:5042',
+  amount: usdcAccept.maxAmountRequired,
+  asset: '0x3600000000000000000000000000000000000000',
+  payTo: usdcMerchant,
+  maxTimeoutSeconds: 604_900,
+  extra: {
+    name: 'GatewayWalletBatched',
+    version: '1',
+    verifyingContract: '0x77777777Dcc4d5A8B6E418Fd04D8997ef11000eE',
+  },
+};
+
+export function arcHeaderFor(accepts: unknown[], over: Record<string, unknown> = {}): string {
+  return Buffer.from(JSON.stringify({
+    x402Version: 2,
+    resource: { url: resource },
+    accepts,
+    ...over,
+  })).toString('base64');
+}
+
+export const arcPaymentRequiredHeader = arcHeaderFor([v2Accept, arcV2Accept]);
+
+export function usdcFaceWithArc(arcAccept: Record<string, unknown> = arcV2Accept, header?: string) {
+  return {
+    ...usdcFace,
+    arc: { v2Accept: arcAccept, paymentRequiredHeader: header ?? arcHeaderFor([v2Accept, arcAccept]) },
+  };
+}
+
+export function paymentSignatureFor(accepted: unknown): string {
+  return Buffer.from(JSON.stringify({
+    x402Version: 2,
+    accepted,
+    payload: {
+      authorization: { from: `0x${'33'.repeat(20)}`, nonce: `0x${'ab'.repeat(32)}` },
+      signature: `0x${'cd'.repeat(65)}`,
+    },
+  })).toString('base64');
+}

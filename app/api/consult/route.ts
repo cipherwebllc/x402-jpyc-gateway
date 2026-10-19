@@ -3,7 +3,9 @@ import {
   acceptsFor,
   decodePaymentHeader,
   encodePaymentResponse,
+  isArcPayment,
   json402,
+  paymentRequiredHeaderFor,
   relayPayment,
   settlePayment,
   usdcFace,
@@ -13,6 +15,7 @@ import {
   type UsdcFace,
   type VerifyResult,
 } from '@/lib/gate';
+import { ARC_NETWORKS } from '@/lib/sellerPins';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -52,7 +55,7 @@ export async function GET(request: Request): Promise<Response> {
 
   const allAccepts = usdc ? [...accepts, usdc.v1Accepts] : accepts;
   if (!hasPayment) {
-    return paymentError(allAccepts, 'payment_required', usdc?.paymentRequiredHeader);
+    return paymentError(allAccepts, 'payment_required', paymentRequiredHeaderFor(usdc));
   }
 
   const q = new URL(request.url).searchParams.get('q');
@@ -65,16 +68,21 @@ export async function GET(request: Request): Promise<Response> {
 
   let paymentPayload: unknown;
   let isUsdcRail = usdc !== null && paymentSignatureHeader !== null;
+  const isArcRail = isUsdcRail && isArcPayment(usdc!, paymentSignatureHeader!);
   if (!isUsdcRail) {
     paymentPayload = decodePaymentHeader(paymentHeader ?? '');
     if (paymentPayload === undefined) {
-      return paymentError(allAccepts, 'invalid_payment_payload', usdc?.paymentRequiredHeader);
+      return paymentError(allAccepts, 'invalid_payment_payload', paymentRequiredHeaderFor(usdc));
     }
     const network = typeof paymentPayload === 'object' && paymentPayload !== null
       ? (paymentPayload as { network?: unknown }).network : undefined;
     if (!usdc && typeof network === 'string' &&
         ['base', 'base-sepolia', 'eip155:8453', 'eip155:84532'].includes(network)) {
       return paymentError(accepts, 'payment_invalid');
+    }
+    // Arc is v2 only: a v1 X-PAYMENT naming an Arc network can never be settled.
+    if (typeof network === 'string' && ARC_NETWORKS.includes(network)) {
+      return paymentError(allAccepts, 'payment_invalid', paymentRequiredHeaderFor(usdc));
     }
     isUsdcRail =
       usdc !== null &&
@@ -91,7 +99,7 @@ export async function GET(request: Request): Promise<Response> {
 
     let verification: VerifyResult | Response;
     try {
-      verification = await relayPayment('verify', relayHeaders, usdc, accepts);
+      verification = await relayPayment('verify', relayHeaders, usdc, accepts, isArcRail ? 'arc' : 'base');
     } catch {
       return jsonError(500, 'payment_verification_failed');
     }
@@ -100,7 +108,7 @@ export async function GET(request: Request): Promise<Response> {
       return paymentError(
         allAccepts,
         verification?.invalidReason ?? 'payment_invalid',
-        usdc?.paymentRequiredHeader,
+        paymentRequiredHeaderFor(usdc),
       );
     }
 
@@ -116,7 +124,7 @@ export async function GET(request: Request): Promise<Response> {
 
     let settlement: SettleResult | Response;
     try {
-      settlement = await relayPayment('settle', relayHeaders, usdc, accepts);
+      settlement = await relayPayment('settle', relayHeaders, usdc, accepts, isArcRail ? 'arc' : 'base');
     } catch {
       return jsonError(500, 'payment_settlement_failed');
     }
@@ -125,16 +133,19 @@ export async function GET(request: Request): Promise<Response> {
       return paymentError(
         allAccepts,
         settlement?.errorReason ?? 'settlement_failed',
-        usdc?.paymentRequiredHeader,
+        paymentRequiredHeaderFor(usdc),
       );
     }
 
+    const paymentResponse = encodePaymentResponse(settlement);
     return new Response(serializedBody, {
       status: 200,
       headers: {
         'content-type': 'application/json',
         'cache-control': 'no-store',
-        'X-PAYMENT-RESPONSE': encodePaymentResponse(settlement),
+        'X-PAYMENT-RESPONSE': paymentResponse,
+        // Arc buyers pay with x402 v2 clients, which read PAYMENT-RESPONSE.
+        ...(isArcRail ? { 'PAYMENT-RESPONSE': paymentResponse } : {}),
       },
     });
   }
@@ -149,7 +160,7 @@ export async function GET(request: Request): Promise<Response> {
     return paymentError(
       allAccepts,
       verification.invalidReason ?? 'invalid_payment',
-      usdc?.paymentRequiredHeader,
+      paymentRequiredHeaderFor(usdc),
     );
   }
 
@@ -173,7 +184,7 @@ export async function GET(request: Request): Promise<Response> {
     return paymentError(
       allAccepts,
       settlement.errorReason ?? 'settlement_failed',
-      usdc?.paymentRequiredHeader,
+      paymentRequiredHeaderFor(usdc),
     );
   }
 
