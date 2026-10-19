@@ -118,6 +118,18 @@ payment-required: ...
 
 USDC の verify / settle には検証済みの決済条件も送信します。掲載内容の変更でリレーが 409 を返した場合、USDC キャッシュを破棄してその場で再取得・再検証し、新しい決済条件と `PAYMENT-REQUIRED` ヘッダを含む `402 requirements_mismatch` を返します。買い手は新しい条件を確認して再試行できます。元の支払いは自動再送しません。再取得や pin 検証に失敗した場合は 500 を返し、古い条件での支払い処理を続けません。
 
+### Arc (Circle Gateway) でも販売する
+
+OpenPay 本体の出品フォームで USDC 面の「Arc (Circle Gateway) でも販売する」をオンにすると、Arc (Circle の L1) の USDC でも買えるようになります。**このゲートウェイ側の追加設定はありません。** OpenPay のリレーが Arc の決済条件を返すと、ゲートウェイがそれを検証して提示します (USDC 面と同じ 2 段のキャッシュ)。
+
+- Arc は x402 **v2 のみ**です。402 の `PAYMENT-REQUIRED` ヘッダが Base + Arc の 2 件になり、v1 の本文 (`accepts`) は従来どおり JPYC と Base USDC だけです。v1 の `X-PAYMENT` で Arc を指定した支払いは `402 payment_invalid` になります。
+- **買い手は事前に Circle Gateway Wallet へ USDC を入金しておく必要があります** (以降の支払いはガス不要)。
+- **売上は受取アドレスの Gateway 残高に入り、受け取るには引き出し (withdraw) が必要です** (Base は直接着金)。受取先は `EXPECTED_USDC_RECIPIENT` と同じアドレスで、**EOA (通常のウォレット) にしてください** — コントラクトウォレットでは引き出せない可能性があります。
+- x402 Bazaar / agentic.market への掲載は Base 側で行われます (CDP は Arc を扱いません)。
+- ゲートは Arc の受取先・ネットワーク・asset・金額 (Base と同額)・ヘッダの並びを検証し、不一致なら USDC と同じく両レールを止めます。署名先の Gateway Wallet・署名ドメイン・有効期間・ヘッダのメタ情報が合わないときは、**Arc だけを提示から外して** Base と JPYC の販売を続け、理由をログに 1 回だけ記録します。
+- Arc で決済できた 200 には `X-PAYMENT-RESPONSE` に加えて `PAYMENT-RESPONSE` (v2) も付きます。Base の 200 は従来どおり `X-PAYMENT-RESPONSE` のみです。
+- `openpay-x402-sdk` で動かしている出品は Arc を提示しません (このゲートウェイ版が必要です)。
+
 ## 買い手テスト
 
 Claude Desktop と `openpay-x402-mcp`、または OpenPay 対応 SDK で、支払い付きで次のような URL を呼び出します。
