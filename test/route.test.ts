@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { Adapter } from '@/lib/adapters/types';
 import { selectedAdapter } from '@/lib/adapters';
-import { resetAcceptsCache, resetUsdcFaceCache } from '@/lib/gate';
+import { resetAcceptsCache, resetArcProblemLog, resetUsdcFaceCache } from '@/lib/gate';
 
 vi.mock('@/lib/adapters', () => ({
   selectedAdapter: vi.fn(),
@@ -40,7 +40,23 @@ type FacilitatorState = {
   relaySettleStatus?: number;
   relayVerifyThrows?: boolean;
   relaySettleThrows?: boolean;
+  /** Emulate the relay's rail rule: a pin of one rail with a payment on another gets 409. */
+  enforceRailPins?: boolean;
 };
+
+function railConflict(init?: RequestInit): boolean {
+  const body = JSON.parse(String(init?.body)) as {
+    paymentRequirements?: Record<string, unknown>;
+    paymentSignatureHeader?: string;
+  };
+  if (!body.paymentRequirements || !body.paymentSignatureHeader) return false;
+  const accepted = (JSON.parse(Buffer.from(body.paymentSignatureHeader, 'base64').toString('utf8')) as {
+    accepted?: { network?: string };
+  }).accepted;
+  const pinIsArc = !('maxAmountRequired' in body.paymentRequirements);
+  const paidOnArc = accepted?.network === 'eip155:5042';
+  return pinIsArc !== paidOnArc;
+}
 
 function fetchFor(state: FacilitatorState = {}, events?: string[]) {
   return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -57,11 +73,13 @@ function fetchFor(state: FacilitatorState = {}, events?: string[]) {
     }
     if (target === `${OPENPAY}/api/x402/relay/verify`) {
       events?.push('relay verify');
+      if (state.enforceRailPins && railConflict(init)) return response({ error: 'requirements_mismatch' }, 409);
       if (state.relayVerifyThrows) throw new Error('relay verify unavailable');
       return response(state.relayVerify ?? { isValid: true }, state.relayVerifyStatus);
     }
     if (target === `${OPENPAY}/api/x402/relay/settle`) {
       events?.push('relay settle');
+      if (state.enforceRailPins && railConflict(init)) return response({ error: 'requirements_mismatch' }, 409);
       if (state.relaySettleThrows) throw new Error('relay settle unavailable');
       return response(
         state.relaySettle ?? { success: true, transaction: '0xusdcsettled', network: 'base' },
@@ -104,6 +122,7 @@ describe('GET /api/consult', () => {
   beforeEach(() => {
     resetAcceptsCache();
     resetUsdcFaceCache();
+    resetArcProblemLog();
     vi.stubEnv('MY_RESOURCE_URL', resource);
     vi.stubEnv('MY_RESOURCE_ID', resourceId);
     vi.stubEnv('EXPECTED_RECIPIENT', merchant);
@@ -999,10 +1018,53 @@ describe('GET /api/consult', () => {
       expect(res.headers.get('PAYMENT-RESPONSE')).toBeNull();
     });
 
-    it('sends the Base pin for an Arc payment when the face does not serve Arc, so the relay refuses it', async () => {
-      useFace(usdcFace);
-      await GET(arcPayment());
+    it('recovers when OpenPay enables Arc after the gateway cached a Base-only face', async () => {
+      const state: FacilitatorState = { usdc: true, requirements: usdcFace, enforceRailPins: true };
+      fetchMock = fetchFor(state);
+      vi.stubGlobal('fetch', fetchMock);
+      await GET(new Request(url()));
+      state.requirements = usdcFaceWithArc();
+
+      const stale = await GET(arcPayment());
+      expect(stale.status).toBe(402);
+      expect((await stale.json()) as { error: string }).toMatchObject({ error: 'requirements_mismatch' });
+      expect(stale.headers.get('PAYMENT-REQUIRED')).toBe(arcPaymentRequiredHeader);
       expect(relayBody('verify').paymentRequirements).toEqual(usdcAccept);
+      expect(adapter).not.toHaveBeenCalled();
+
+      const retried = await GET(arcPayment());
+      expect(retried.status).toBe(200);
+      expect(relayBody('verify', 1).paymentRequirements).toEqual(arcV2Accept);
+    });
+
+    it('recognises an unpadded PAYMENT-SIGNATURE like the relay does', async () => {
+      useFace(usdcFaceWithArc(), { enforceRailPins: true });
+      let padded = '';
+      for (let filler = ''; !padded.endsWith('='); filler += 'x') {
+        padded = Buffer.from(JSON.stringify({
+          x402Version: 2,
+          accepted: arcV2Accept,
+          payload: { authorization: { nonce: `0x${'ab'.repeat(32)}` }, signature: '0x00', filler },
+        })).toString('base64');
+      }
+      const unpadded = padded.replace(/=+$/, '');
+      const res = await GET(new Request(url(), { headers: { 'PAYMENT-SIGNATURE': unpadded } }));
+      expect(res.status).toBe(200);
+      expect(relayBody('verify').paymentRequirements).toEqual(arcV2Accept);
+    });
+
+    it('never runs the adapter for an Arc payment while the Arc face is dropped, and logs the reason once', async () => {
+      const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+      useFace(usdcFaceWithArc({ ...arcV2Accept, extra: { ...arcV2Accept.extra, verifyingContract: attacker } }), {
+        enforceRailPins: true,
+      });
+      for (let i = 0; i < 3; i += 1) {
+        const res = await GET(arcPayment());
+        expect(res.status).toBe(402);
+        expect(res.headers.get('PAYMENT-REQUIRED')).toBe(paymentRequiredHeader);
+      }
+      expect(adapter).not.toHaveBeenCalled();
+      expect(errors.mock.calls.filter(([line]) => String(line).includes('Arc face disabled'))).toHaveLength(1);
     });
 
     it('rejects a v1 X-PAYMENT that names an Arc network without calling any facilitator', async () => {

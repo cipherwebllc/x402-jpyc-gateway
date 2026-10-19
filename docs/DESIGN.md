@@ -769,3 +769,35 @@ relay を先に出す (Arc は flag OFF で無効・既存クライアントは 
    - relay テスト: Arc ありでも既存 4 フィールドが Arc なしと byte 一致。Arc accept の payTo は出品の
      `usdc.payTo` (first-party の payTo ではない)。
    - Base v2 の応答は `X-PAYMENT-RESPONSE` のみ (既存) を README に明記。
+
+### コードレビュー裁定 (Codex GPT 6 Astra xHigh・読むだけ, 2026-10-20)
+
+relay (OpenPay `feat/relay-arc`):
+- **major 3 件 (採用・修正済み)** — 使い回し防止の印を状態遷移に作り直した:
+  `(なし) --verify isValid:true--> pending(credential) --settle 開始 (Lua CAS)--> settling(credential)`
+  `settling --成功 / nonce_already_used / 判定なし (2xx の形不明・例外)--> settled (604900 秒)`
+  `settling --明示的な否定判定--> (なし)` ※同じ credential のときだけ消す (Lua CAS)。
+  credential は正規化した署名の fingerprint (キーには使わない)。これで
+  (1) 同じ from/nonce に不正な署名を添えた settle は正規の印を動かせない (`authorization_in_use`・Gateway を呼ばない)、
+  (2) `200 {}` などの判定なしは決済済み側に倒して 503、
+  (3) verify を経ない settle は `authorization_not_verified` で Gateway を呼ばない (決済中の隙間に別の verify を通さない)。
+  同じ署名の settle の同時投入は 1 本だけ Gateway に届く。KV 障害は従来どおり fail-open。
+  テストは本物の Lua (tests/_helpers/redisLua の fake Upstash・仮想時計) で TTL まで検証する。
+- minor (不採用): relay が v1 X-PAYMENT の Arc network に 400 を返すのは §17 の裁定違反、という指摘。
+  「402 `payment_invalid`」はゲートウェイ側の規則 (ゲートウェイは実装済み)。relay は HTTP の relay API として
+  復号できない支払いに従来どおり 400 `invalid_payment_payload` を返す。
+- minor (文書を実装に合わせる): 公開 flag の名前は既存の `NEXT_PUBLIC_ENABLE_X402_DUAL_RAIL` に合わせて
+  **`NEXT_PUBLIC_ENABLE_X402_DUAL_RAIL_ARC`** (§17 R1 の `..._ARC_UI` は採らない)。
+- minor (採用): kill switch は進行中の Arc の settle も止める (pin 付きは 409・pin なしは 400・買い手は課金されない)
+  ことと、UI flag を先に外して出品者のキャッシュが切れるのを待つ手順を DEPLOY_CHECKLIST に追記。追加した節の番号が
+  既存の §14.9 と重複していたので §14.8b に変更。
+
+ゲートウェイ (`feat/arc-rail`):
+- **major (採用・修正済み)**: Arc の判定がパディング無しの base64 を受けず、relay (受ける) と食い違って 409 が
+  回り続ける。→ PAYMENT-SIGNATURE の Arc 判定は relay の `decodePaymentSignatureHeaderValue` と同じ受理規則
+  (`^[A-Za-z0-9+/]*={0,2}$`) で復号する。v1 X-PAYMENT の復号 (厳格) は変えない。
+- minor (採用): Arc の問題のログの重複排除が 409 (キャッシュのリセット) のたびに消えて同じ警告が繰り返し出る。
+  → 重複排除はキャッシュと独立にし、テスト用のリセットを別に用意。
+- minor (採用): 「relay が拒否する」はずのテストが成功を許していた。→ テストの relay モックに rail ルール
+  (pin と支払いの rail が違えば 409) を入れ、「Base のみの face を持つゲートウェイで Arc 支払い → 409 →
+  取り直して Arc 入りの 402 → 再署名で 200」の回復と、Arc を落とした face では上流が一度も動かないことを固定。

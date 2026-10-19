@@ -75,10 +75,21 @@ export function paymentRequiredHeaderFor(face: UsdcFace | null): string | undefi
   return face?.arc?.paymentRequiredHeader ?? face?.paymentRequiredHeader;
 }
 
+// Same acceptance rules as OpenPay's decodePaymentSignatureHeaderValue (unpadded base64 allowed),
+// so the gateway and the relay always agree on which rail a PAYMENT-SIGNATURE pays.
+function decodePaymentSignature(raw: string): unknown {
+  if (!/^[A-Za-z0-9+/]*={0,2}$/.test(raw)) return undefined;
+  try {
+    return JSON.parse(Buffer.from(raw, 'base64').toString('utf8'));
+  } catch {
+    return undefined;
+  }
+}
+
 /** True only when the buyer's v2 payment accepted exactly the served Arc terms. */
 export function isArcPayment(face: UsdcFace, paymentSignatureHeader: string): boolean {
   if (!face.arc) return false;
-  const payload = decodePaymentHeader(paymentSignatureHeader);
+  const payload = decodePaymentSignature(paymentSignatureHeader);
   const accepted = typeof payload === 'object' && payload !== null
     ? (payload as { accepted?: unknown }).accepted : undefined;
   return sameJson(accepted, face.arc.v2Accept);
@@ -106,6 +117,9 @@ export function resetUsdcFaceCache(): void {
   usdcFaceCache = null;
   usdcFaceCachedAt = 0;
   usdcAppliedSeq = usdcFetchSeq;
+}
+
+export function resetArcProblemLog(): void {
   loggedArcProblems.clear();
 }
 
