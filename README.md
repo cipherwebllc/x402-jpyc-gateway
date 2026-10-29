@@ -7,7 +7,7 @@
 アダプタ式で、同梱は 2 種:
 
 - `http` — **任意の JSON API** に中継 (コード変更ゼロの課金化)
-- `coo-icp` (既定) — Internet Computer の coo-icp canister (`chat : (text) -> (text)`) に中継。[実売実績あり](https://open-pay.jp/discovery)
+- `coo-icp` (既定) — Internet Computer の coo-icp canister (`chat : (text) -> (text)`) に中継。[動作確認済み](https://open-pay.jp/discovery)
 
 決済の実体 (署名検証・オンチェーン決済・手数料分割) は OpenPay のファシリテーターが行い、このゲートウェイは鍵もお金も持ちません。
 
