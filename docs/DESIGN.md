@@ -23,15 +23,18 @@ Next.js App Router (TypeScript)、Vercel にデプロイ可能。
 lib/gate.ts               OpenPay 402 ゲート (公式スニペットの TS 化 + 2 変更 + seller pin)
 lib/sellerPins.ts         必須設定・JPYC/USDC の seller pin 検証
 lib/paymentHeader.ts      買い手/USDC requirements 共通の厳密な base64/JSON デコード
+lib/openapi.ts            x402scan 用の OpenAPI 文書。検証だけ共有し、OpenPay は支払いの経路と別に読む
 instrumentation.ts       Next.js サーバー起動時の必須設定検査
 lib/adapters/types.ts     Adapter = (input: { q: string }) => Promise<unknown>
 lib/adapters/http.ts      汎用: UPSTREAM_URL に ?q= を付けて GET、JSON 中継
 lib/adapters/coo-icp.ts   @icp-sdk/core (agent) で canister chat(text) を update call
 lib/adapters/index.ts     env ADAPTER による選択 (coo-icp | http)
 app/api/consult/route.ts  GET ハンドラ (処理順は §5)
+app/openapi.json/route.ts GET ハンドラ (lib/openapi.ts の文書を返す・確認できなければ 404)
 app/layout.tsx, page.tsx  最小の説明ページ (無くてもよいが案内用に置く)
 test/route.test.ts        ゲート+route の結合テスト (fetch/adapter 全モック)
 test/gate.test.ts         起動設定・出品 pin・キャッシュ・USDC 決済条件のテスト
+test/openapi.test.ts      /openapi.json の形・404 の条件・/api/consult の 402 が変わらないこと
 test/coo-icp.test.ts      アダプタ単体 (Actor モック)
 README.md                 セットアップ / env / デプロイ / 掲載手順 / curl 確認
 ```

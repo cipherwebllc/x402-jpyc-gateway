@@ -130,6 +130,13 @@ OpenPay 本体の出品フォームで USDC 面の「Arc (Circle Gateway) でも
 - Arc で決済できた 200 には `X-PAYMENT-RESPONSE` に加えて `PAYMENT-RESPONSE` (v2) も付きます。Base の 200 は従来どおり `X-PAYMENT-RESPONSE` のみです。
 - `openpay-x402-sdk` で動かしている出品は Arc を提示しません (このゲートウェイ版が必要です)。
 
+## x402scan への掲載
+
+USDC を販売していれば、`GET /openapi.json` を自動で公開します。**追加の設定はありません。** パスと origin は `MY_RESOURCE_URL` から、説明と価格 (`usdc.priceUsd`) は OpenPay の掲載情報から作ります。掲載情報は `/api/consult` とは別に読み、最大 30 分キャッシュするので、価格を変えてから文書に反映されるまで最大 30 分かかります。USDC が無効なとき、アダプタの設定が足りないとき、掲載情報や決済条件を確認できないときは `404` を返します (読み取りに失敗したら 1 分は読み直しません)。この取得に失敗しても、`/api/consult` には影響しません。必須の環境変数の不足は、ほかのルートと同じく起動時の設定エラーになります。
+
+1. `curl -i "https://<本番のホスト>/openapi.json"` が 200 を返すことを確認します。
+2. [x402scan の登録ページ](https://www.x402scan.com/resources/register)に `MY_RESOURCE_URL` を貼り、「This URL only」で登録します。Vercel のプレビュー URL は登録できません。
+
 ## 買い手テスト
 
 Claude Desktop と `openpay-x402-mcp`、または OpenPay 対応 SDK で、支払い付きで次のような URL を呼び出します。
