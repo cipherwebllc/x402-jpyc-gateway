@@ -1,13 +1,12 @@
-// x402scan 用の OpenAPI 文書。支払いの経路に影響させないため、lib/gate.ts のキャッシュと
-// 取得の順序には触らず、検証だけを共有して OpenPay を別に読む。
+// x402scan 用の OpenAPI 文書。支払いの経路に影響させないため、lib/listing.ts と lib/usdcFace.ts の
+// キャッシュと取得の順序には触らず、検証だけを共有して OpenPay を別に読む。
 import {
   arcFaceProblem,
   sellerConfig,
   validateJpycListing,
   validateUsdcFace,
-  type CatalogItem,
-  type SellerConfig,
 } from './sellerPins';
+import type { CatalogItem, SellerConfig } from './types';
 
 const OPENPAY = 'https://open-pay.jp';
 // OpenPay の取得上限は IP ごとで /api/consult と共有する。失敗も含めて読む回数を抑える。

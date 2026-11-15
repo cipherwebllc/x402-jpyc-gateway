@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { register } from '@/instrumentation';
-import {
-  acceptsFor, resetAcceptsCache, resetUsdcFaceCache, usdcFace,
-  verifyPayment, settlePayment, relayPayment,
-} from '@/lib/gate';
+import { acceptsFor, resetAcceptsCache } from '@/lib/listing';
+import { verifyPayment, settlePayment } from '@/lib/openpay';
+import { relayPayment } from '@/lib/relay';
+import { resetUsdcFaceCache, usdcFace } from '@/lib/usdcFace';
 import {
   OPENPAY, resource, resourceId, merchant, usdcMerchant, attacker, listing, catalogAccept,
   usdcFace as validUsdcFace, v2Accept, response, paymentPayload,
