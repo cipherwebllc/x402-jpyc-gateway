@@ -87,8 +87,13 @@ export async function acceptsFor(
   options: { forPayment?: boolean } = {},
 ): Promise<PaymentRequirements[]> {
   const accepts = await listingAccepts(termsMaxAgeMs(options.forPayment));
-  // listingAccepts の sellerConfig() が MY_RESOURCE_URL を確かめ済み。
-  const configuredUrl = new URL(process.env.MY_RESOURCE_URL!);
+  // sellerConfig() が確かめたのは discovery を待つ前。待つ間に消えた場合もここで止める。
+  const configuredResource = process.env.MY_RESOURCE_URL;
+  if (!configuredResource) {
+    throw new Error('MY_RESOURCE_URL is not set');
+  }
+
+  const configuredUrl = new URL(configuredResource);
   const actualRequestUrl = new URL(requestUrl);
   configuredUrl.hash = '';
   configuredUrl.search = actualRequestUrl.search;

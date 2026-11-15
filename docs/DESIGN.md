@@ -34,10 +34,11 @@ lib/sellerPins.ts         必須設定・JPYC/USDC の seller pin 検証
 lib/paymentHeader.ts      base64/JSON デコード (X-PAYMENT・USDC requirements は厳密、PAYMENT-SIGNATURE は relay と同じ規則)
 lib/openapi.ts            x402scan 用の OpenAPI 文書。検証だけ共有し、OpenPay は支払いの経路と別に読む
 instrumentation.ts        Next.js サーバー起動時の必須設定検査
-lib/adapters/types.ts     Adapter = (input: { q: string }) => Promise<unknown> と、一覧に載せる形
+lib/adapters/types.ts     Adapter = (input: { q: string }) => Promise<unknown>
 lib/adapters/http.ts      汎用: UPSTREAM_URL に ?q= を付けて GET、JSON 中継
 lib/adapters/coo-icp.ts   @icp-sdk/core (agent) で canister の clear_conversation → send_message を update call (§18)
-lib/adapters/index.ts     env ADAPTER による選択 (coo-icp | http) と、/openapi.json に載せる応答の schema
+lib/adapters/index.ts     env ADAPTER による選択 (coo-icp | http)
+lib/adapters/catalog.ts   アダプタの名前ごとの設定の有無と、/openapi.json に載せる応答の schema (本体を読まない)
 app/api/consult/route.ts  GET ハンドラ (処理順は §5。決済条件 → 支払いなしの 402 → q → lib/purchase.ts)
 app/openapi.json/route.ts GET ハンドラ (lib/openapi.ts の文書を返す・確認できなければ 404)
 app/layout.tsx, page.tsx  最小の説明ページ (無くてもよいが案内用に置く)
@@ -945,7 +946,8 @@ P3 文書が衝突を「片方が失敗」としていた → 片方または両
   - OpenPay の origin・決済条件の鮮度 (`termsMaxAgeMs`)・facilitator の verify / settle・
     `encodePaymentResponse` → lib/openpay.ts。pin の確認は同期のまま (不一致なら何も送らずにその場で throw)。
   - JPYC 出品のキャッシュ (`myAccepts` → `listingAccepts`) と `acceptsFor` → lib/listing.ts。
-    sellerConfig() で確かめ済みの MY_RESOURCE_URL の再確認と、上書きされるだけの `search = ''` を消した。
+    上書きされるだけの最初の `search = ''` を消した。MY_RESOURCE_URL の確認は残す (sellerConfig() が読むのは
+    discovery を待つ前なので、待つ間に消えた場合はここで `MY_RESOURCE_URL is not set` になる)。
   - USDC 面のキャッシュ・Arc の問題ログ・`paymentRequiredHeaderFor`・`isArcPayment` → lib/usdcFace.ts。
   - `relayPayment` (409 での取り直しを含む) → lib/relay.ts。
   - `decodePaymentSignature` → lib/paymentHeader.ts。厳密な `decodePaymentHeader` と受理する形が違う理由を
@@ -954,9 +956,14 @@ P3 文書が衝突を「片方が失敗」としていた → 片方または両
   rail ごとに違うのは verify / settle の呼び先・理由がないときの error・成功時のヘッダーの 3 点だけ。
   rail の選び方は純粋な関数 `choosePayment` にした (分岐の順番はそのまま)。支払いなしの 402 と q の確認は、
   いままでどおり route が先に行う。`paymentError` は消した。
-- アダプタの一覧を lib/adapters/index.ts にまとめた。各アダプタは `{ run, configured(), outputSchema }` も
-  export し、lib/openapi.ts は自前の ADAPTER の判定をやめて `selectedAdapterSchema()` を使う。
-  `selectedAdapter()` の契約 (未知の ADAPTER は throw) は同じ。
+  rail の verify / settle は呼び先の Promise をそのまま返し、await を 1 つも足さない。足すと、同時に動く
+  別の支払いとの上流の呼び出しや settle の順番が変わる (Codex のレビューで見つかった)。USDC の null を `{}` に
+  する読み替えは、await の直後に同期で行う。
+- アダプタの名前ごとの `configured()` と `outputSchema` を lib/adapters/catalog.ts にまとめた。lib/openapi.ts は
+  自前の ADAPTER の判定をやめて、ここの `selectedAdapterSchema()` を使う (呼ぶたびに schema の複製を返す)。
+  catalog.ts はアダプタ本体を import しないので、/openapi.json は ICP の SDK を読み込まない。
+  lib/adapters/index.ts の `selectedAdapter()` は同じ契約 (未知の ADAPTER は throw) のまま、名前だけ catalog.ts
+  から読む。coo-icp.ts と http.ts は変えていない。
 - 試しに置かれていた .isolation-test.tmp.mjs を削除した (mainnet の canister を呼び、0.7.0 で消えた
   `chat` を使う)。
 - import は一方向で、循環はない (lib/openpay.ts は lib/listing.ts も lib/usdcFace.ts も読まない)。
@@ -972,9 +979,11 @@ P3 文書が衝突を「片方が失敗」としていた → 片方または両
   sha256 は最初のコミットのときから同じ:
   - test/golden.test.ts: `c10355a916176b20e1c8e670269326f7144d796934132fab9bf0f6941c9fb1a2`
   - test/__snapshots__/golden.test.ts.snap: `438edc59c158e0a6e973dd1bed330b92cea7fad0f0abfee9c064d91183e7dd2b`
-- 既存のテストで変えたのは import 先と、test/openapi.test.ts の `@/lib/adapters` のモック (本物を
-  importOriginal で広げ、`selectedAdapter` だけを差し替える) だけ。期待値・テスト名・場面は変えていない。
-  `choosePayment` の表 (test/purchase.test.ts) は新しく足した。
+- 既存のテストで変えたのは import 先だけ。期待値・テスト名・場面・モックは変えていない。
+- test/purchase.test.ts を新しく足した: `choosePayment` の表と、同じモジュールで同時に動く 2 件の支払い
+  (USDC と JPYC など) の順番 (verify / 上流 / settle の fetch と応答)。golden は 1 件ずつ動かすので、
+  await の数で変わるこの順番は golden では見えない。期待値はリファクタ前のコード (a108724) で同じテストを
+  動かして得たもので、await を足していた版 (2030ccb〜8e536dc) では 3 件が失敗することを確かめた。
 
 ### わざと残したもの (後のフェーズで直す)
 

@@ -72,9 +72,12 @@ export function choosePayment(
 }
 
 // 1 つの rail の verify / settle。Response が返ったらそのまま返す (USDC の 409 → 402 requirements_mismatch)。
+// verify / settle は呼び先の Promise をそのまま返し、await を足さない。足すと、同時に動く別の支払いとの
+// 上流の呼び出しや settle の順番が以前と変わる。本文の読み替えは await の直後に同期の read で行う。
 type PurchaseRail = {
   verify(): Promise<VerifyResult | Response>;
   settle(): Promise<SettleResult | Response>;
+  read<T>(body: T): T;
   // isValid が true でなく理由もないときの error。いまは rail ごとに文字列が違う (C1 で揃える)。
   invalidFallback: 'invalid_payment' | 'payment_invalid';
   successHeaders(paymentResponse: string): Record<string, string>;
@@ -82,10 +85,11 @@ type PurchaseRail = {
 
 function jpycRail(payload: unknown, accept: PaymentRequirements): PurchaseRail {
   return {
-    // facilitator の JSON は加工しない。null だと runPurchase の isValid / success の読み取りが
-    // try の外で TypeError になり、GET から漏れる (Next の 500)。いまの挙動のまま残す (C1 で直す)。
     verify: () => verifyPayment(payload, accept),
     settle: () => settlePayment(payload, accept),
+    // facilitator の JSON は加工しない。null だと runPurchase の isValid / success の読み取りが
+    // try の外で TypeError になり、GET から漏れる (Next の 500)。いまの挙動のまま残す (C1 で直す)。
+    read: (body) => body,
     invalidFallback: 'invalid_payment',
     successHeaders: (paymentResponse) => ({ 'X-PAYMENT-RESPONSE': paymentResponse }),
   };
@@ -93,9 +97,10 @@ function jpycRail(payload: unknown, accept: PaymentRequirements): PurchaseRail {
 
 function usdcRail({ face, headers, rail }: UsdcPurchase, jpycAccepts: PaymentRequirements[]): PurchaseRail {
   return {
+    verify: () => relayPayment('verify', headers, face, jpycAccepts, rail),
+    settle: () => relayPayment('settle', headers, face, jpycAccepts, rail),
     // relay の JSON null は {} にする。以前の `?.` と同じく 402 (payment_invalid / settlement_failed) になる。
-    verify: async () => (await relayPayment('verify', headers, face, jpycAccepts, rail)) ?? {},
-    settle: async () => (await relayPayment('settle', headers, face, jpycAccepts, rail)) ?? {},
+    read: (body) => body ?? ({} as typeof body),
     invalidFallback: 'payment_invalid',
     successHeaders: (paymentResponse) => ({
       'X-PAYMENT-RESPONSE': paymentResponse,
@@ -116,7 +121,7 @@ export async function runPurchase(
 
   let verification: VerifyResult | Response;
   try {
-    verification = await rail.verify();
+    verification = rail.read(await rail.verify());
   } catch {
     return jsonResponse(500, { error: 'payment_verification_failed' });
   }
@@ -137,7 +142,7 @@ export async function runPurchase(
 
   let settlement: SettleResult | Response;
   try {
-    settlement = await rail.settle();
+    settlement = rail.read(await rail.settle());
   } catch {
     return jsonResponse(500, { error: 'payment_settlement_failed' });
   }

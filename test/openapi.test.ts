@@ -4,8 +4,7 @@ import { resetAcceptsCache } from '@/lib/listing';
 import { resetArcProblemLog, resetUsdcFaceCache } from '@/lib/usdcFace';
 import { resetOpenApiCache } from '@/lib/openapi';
 
-vi.mock('@/lib/adapters', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/lib/adapters')>()),
+vi.mock('@/lib/adapters', () => ({
   selectedAdapter: vi.fn(),
 }));
 

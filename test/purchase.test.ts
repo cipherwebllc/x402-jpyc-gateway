@@ -1,12 +1,15 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { choosePayment, type PaymentChoice } from '@/lib/purchase';
 import type { UsdcFace } from '@/lib/types';
 
 import {
-  arcPaymentRequiredHeader, arcV2Accept, catalogAccept, paymentHeader, paymentPayload,
-  paymentRequiredHeader, paymentSignatureFor, usdcAccept, usdcFace, usdcFaceWithArc, v2Accept,
+  OPENPAY, arcPaymentRequiredHeader, arcV2Accept, catalogAccept, listing, merchant, paymentHeader,
+  paymentPayload, paymentRequiredHeader, paymentSignatureFor, resource, resourceId, response, usdcAccept,
+  usdcFace, usdcFaceWithArc, usdcMerchant, v2Accept,
 } from './fixtures';
+
+vi.mock('@/lib/adapters', () => ({ selectedAdapter: vi.fn() }));
 
 const b64 = (value: unknown) => Buffer.from(JSON.stringify(value)).toString('base64');
 const onNetwork = (network: string) => b64({ network, authorization: 'payment' });
@@ -130,5 +133,89 @@ describe('choosePayment', () => {
       .toEqual({ kind: 'usdc', face: usdcFace, headers: { paymentHeader: x }, rail: 'base' });
     expect(choosePayment({ paymentHeader: x, paymentSignatureHeader: SIG_BASE }, [catalogAccept], usdcFace))
       .toEqual({ kind: 'usdc', face: usdcFace, headers: { paymentSignatureHeader: SIG_BASE }, rail: 'base' });
+  });
+});
+
+// 同じモジュールで同時に動く 2 件の支払いの順番 (verify / 上流 / settle の fetch と応答)。await が 1 つ
+// 増えるだけで入れ替わる (coo-icp の slot の割り当ても変わる)。期待値はリファクタ前のコード
+// (a108724 の route.ts) で同じテストを動かして得た順番。lib/ はモックした '@/lib/adapters' と route だけを
+// 読むので、同じ本文が分割の前後どちらでも動く。
+describe('two concurrent paid requests on one module', () => {
+  const ROUTES: Record<string, string> = {
+    [`${OPENPAY}/api/discovery/${resourceId}`]: 'discovery',
+    [`${OPENPAY}/api/x402/relay/requirements?resourceId=${resourceId}`]: 'requirements',
+    [`${OPENPAY}/api/facilitator/verify`]: 'facilitator verify',
+    [`${OPENPAY}/api/facilitator/settle`]: 'facilitator settle',
+    [`${OPENPAY}/api/x402/relay/verify`]: 'relay verify',
+    [`${OPENPAY}/api/x402/relay/settle`]: 'relay settle',
+  };
+  const BODIES: Record<string, unknown> = {
+    discovery: listing,
+    requirements: usdcFaceWithArc(),
+    'facilitator verify': { isValid: true },
+    'facilitator settle': { success: true, transaction: '0xjpyc' },
+    'relay verify': { isValid: true },
+    'relay settle': { success: true, transaction: '0xusdc' },
+  };
+  const PAID: Record<string, Record<string, string>> = {
+    jpyc: { 'X-PAYMENT': paymentHeader },
+    base1: { 'X-PAYMENT': onNetwork('base') },
+    base2: { 'PAYMENT-SIGNATURE': SIG_BASE },
+    arc: { 'PAYMENT-SIGNATURE': SIG_ARC },
+  };
+  let events: string[] = [];
+
+  beforeEach(async () => {
+    vi.resetModules();
+    vi.stubEnv('MY_RESOURCE_URL', resource);
+    vi.stubEnv('MY_RESOURCE_ID', resourceId);
+    vi.stubEnv('EXPECTED_RECIPIENT', merchant);
+    vi.stubEnv('EXPECTED_USDC_RECIPIENT', usdcMerchant);
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const route = ROUTES[String(input)];
+      events.push(`fetch ${route}`);
+      return response(BODIES[route]);
+    }));
+    const { selectedAdapter } = await import('@/lib/adapters');
+    vi.mocked(selectedAdapter).mockReset().mockReturnValue(async ({ q }) => {
+      events.push(`adapter ${q}`);
+      return { answer: q };
+    });
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  it.each<[string, string, string[]]>([
+    ['base2', 'jpyc', ['fetch relay verify', 'fetch facilitator verify', 'adapter jpyc', 'adapter base2',
+      'fetch facilitator settle', 'fetch relay settle', 'done jpyc', 'done base2']],
+    ['jpyc', 'base2', ['fetch facilitator verify', 'fetch relay verify', 'adapter jpyc', 'fetch facilitator settle',
+      'adapter base2', 'fetch relay settle', 'done jpyc', 'done base2']],
+    ['base1', 'jpyc', ['fetch relay verify', 'fetch facilitator verify', 'adapter jpyc', 'adapter base1',
+      'fetch facilitator settle', 'fetch relay settle', 'done jpyc', 'done base1']],
+    ['jpyc', 'base1', ['fetch facilitator verify', 'fetch relay verify', 'adapter jpyc', 'fetch facilitator settle',
+      'adapter base1', 'fetch relay settle', 'done jpyc', 'done base1']],
+    ['arc', 'jpyc', ['fetch relay verify', 'fetch facilitator verify', 'adapter jpyc', 'adapter arc',
+      'fetch facilitator settle', 'fetch relay settle', 'done jpyc', 'done arc']],
+    ['jpyc', 'arc', ['fetch facilitator verify', 'fetch relay verify', 'adapter jpyc', 'fetch facilitator settle',
+      'adapter arc', 'fetch relay settle', 'done jpyc', 'done arc']],
+    ['arc', 'base2', ['fetch relay verify', 'fetch relay verify', 'adapter arc', 'adapter base2',
+      'fetch relay settle', 'fetch relay settle', 'done arc', 'done base2']],
+  ])('%s started before %s keeps the original order', async (first, second, expected) => {
+    const { GET } = await import('@/app/api/consult/route');
+    // 支払いなしの 1 件で出品と USDC 面をキャッシュに入れ、支払い 2 件は同じ条件から始める。
+    expect((await GET(new Request(`${resource}?q=warm`))).status).toBe(402);
+    events = [];
+
+    const statuses = await Promise.all([first, second].map(async (name) => {
+      const res = await GET(new Request(`${resource}?q=${name}`, { headers: PAID[name] }));
+      events.push(`done ${name}`);
+      return res.status;
+    }));
+
+    expect(statuses).toEqual([200, 200]);
+    expect(events).toEqual(expected);
   });
 });

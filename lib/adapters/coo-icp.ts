@@ -4,7 +4,7 @@ import { Actor, HttpAgent, type ActorMethod } from '@icp-sdk/core/agent';
 import { IDL } from '@icp-sdk/core/candid';
 import { Ed25519KeyIdentity } from '@icp-sdk/core/identity';
 
-import type { Adapter, AdapterDescriptor } from './types';
+import type { Adapter } from './types';
 
 // coo-icp 0.7.0 の Candid (mainnet の candid:service で確認 2026-11-15)。0.7.0 で `chat` は削除された:
 //   send_message : (request_id : text, base_revision : nat64, content : text)
@@ -150,14 +150,4 @@ export const cooIcpAdapter: Adapter = async ({ q }) => {
       releaseSlot(slot);
     }
   });
-};
-
-export const cooIcpDescriptor: AdapterDescriptor = {
-  run: cooIcpAdapter,
-  configured: () => Boolean(process.env.COO_CANISTER_ID && process.env.IC_IDENTITY_SEED),
-  outputSchema: {
-    type: 'object',
-    properties: { answer: { type: 'string' } },
-    required: ['answer'],
-  },
 };
