@@ -29,7 +29,7 @@ lib/openpay.ts            OpenPay の origin・決済条件の鮮度 (5 分 / 30
 lib/listing.ts            JPYC 出品 (discovery) のキャッシュと、resource だけを差し替えた accepts (acceptsFor)
 lib/usdcFace.ts           USDC 面 (relay/requirements) のキャッシュ・Arc 面の扱い・PAYMENT-REQUIRED
 lib/relay.ts              USDC relay の verify / settle (409 なら面を取り直して 402 requirements_mismatch)
-lib/purchase.ts           払う rail の選択 (choosePayment) と verify → 上流 → settle の手順 (runPurchase)
+lib/purchase.ts           GET /api/consult の本体 (consult: 決済条件 → 支払いなしの 402 → q → choosePayment → verify → 上流 → settle)
 lib/sellerPins.ts         必須設定・JPYC/USDC の seller pin 検証
 lib/paymentHeader.ts      base64/JSON デコード (X-PAYMENT・USDC requirements は厳密、PAYMENT-SIGNATURE は relay と同じ規則)
 lib/openapi.ts            x402scan 用の OpenAPI 文書。検証だけ共有し、OpenPay は支払いの経路と別に読む
@@ -39,12 +39,12 @@ lib/adapters/http.ts      汎用: UPSTREAM_URL に ?q= を付けて GET、JSON �
 lib/adapters/coo-icp.ts   @icp-sdk/core (agent) で canister の clear_conversation → send_message を update call (§18)
 lib/adapters/index.ts     env ADAPTER による選択 (coo-icp | http)
 lib/adapters/catalog.ts   アダプタの名前ごとの設定の有無と、/openapi.json に載せる応答の schema (本体を読まない)
-app/api/consult/route.ts  GET ハンドラ (処理順は §5。決済条件 → 支払いなしの 402 → q → lib/purchase.ts)
+app/api/consult/route.ts  GET ハンドラ (lib/purchase.ts の consult の Promise をそのまま返す。処理順は §5)
 app/openapi.json/route.ts GET ハンドラ (lib/openapi.ts の文書を返す・確認できなければ 404)
 app/layout.tsx, page.tsx  最小の説明ページ (無くてもよいが案内用に置く)
 test/route.test.ts        ゲート+route の結合テスト (fetch/adapter 全モック)
 test/gate.test.ts         起動設定・出品 pin・キャッシュ・USDC 決済条件のテスト
-test/purchase.test.ts     choosePayment の表 (支払いのヘッダーと USDC 面の組み合わせ → rail か 402)
+test/purchase.test.ts     choosePayment の表と、同時に動くリクエストの順番 (上流・settle の呼び出しと完了の順)
 test/golden.test.ts       /api/consult と /openapi.json の挙動の固定 (§19。編集しない)
 test/openapi.test.ts      /openapi.json の形・404 の条件・/api/consult の 402 が変わらないこと
 test/coo-icp.test.ts      アダプタ単体 (Actor モック)
@@ -952,13 +952,20 @@ P3 文書が衝突を「片方が失敗」としていた → 片方または両
   - `relayPayment` (409 での取り直しを含む) → lib/relay.ts。
   - `decodePaymentSignature` → lib/paymentHeader.ts。厳密な `decodePaymentHeader` と受理する形が違う理由を
     コメントに書いた。
-- route.ts にあった JPYC と USDC の 2 本のほぼ同じ手順を、lib/purchase.ts の `runPurchase` 1 本にした。
-  rail ごとに違うのは verify / settle の呼び先・理由がないときの error・成功時のヘッダーの 3 点だけ。
-  rail の選び方は純粋な関数 `choosePayment` にした (分岐の順番はそのまま)。支払いなしの 402 と q の確認は、
-  いままでどおり route が先に行う。`paymentError` は消した。
-  rail の verify / settle は呼び先の Promise をそのまま返し、await を 1 つも足さない。足すと、同時に動く
-  別の支払いとの上流の呼び出しや settle の順番が変わる (Codex のレビューで見つかった)。USDC の null を `{}` に
-  する読み替えは、await の直後に同期で行う。
+- route.ts の GET の中身を lib/purchase.ts の `consult(request)` に移し、JPYC と USDC の 2 本のほぼ同じ手順を
+  その中の 1 本にした。rail ごとに違うのは verify / settle の呼び先・本文の読み替え (`read`: USDC は null を
+  `{}` に、JPYC はそのまま)・理由がないときの error・成功時のヘッダーの 4 点だけ。rail の選び方は純粋な関数
+  `choosePayment` にした (分岐の順番はそのまま)。支払いなしの 402 と q の確認は、いままでどおり rail を選ぶ前に
+  行う。`paymentError` は消した。route.ts の GET は async にせず、consult の Promise をそのまま返す。
+- Promise のジョブの数も変えない (Codex のレビューで 2 回見つかった)。同時に動く別のリクエストとの順番が
+  変わるため:
+  - rail の verify / settle は呼び先の Promise をそのまま返し、await を足さない。`read` は await の直後に
+    同期で呼ぶ。
+  - リクエスト全体を consult という 1 つの async 関数の中で終え、最後に別の async 関数の Promise を return
+    しない (引き継ぐ分だけ完了が遅れる)。
+  - 確かめ方: 支払いなし・各 400 / 402・verify / 上流 / settle の各結果を 3 つの rail で、キャッシュの
+    有無の両方 (118 通り) について、fetch・上流・ログ・完了が何ジョブ目に起きるかを a108724 と比べ、
+    すべて同じだった (このときだけ使った計測で、リポジトリには入れていない)。
 - アダプタの名前ごとの `configured()` と `outputSchema` を lib/adapters/catalog.ts にまとめた。lib/openapi.ts は
   自前の ADAPTER の判定をやめて、ここの `selectedAdapterSchema()` を使う (呼ぶたびに schema の複製を返す)。
   catalog.ts はアダプタ本体を import しないので、/openapi.json は ICP の SDK を読み込まない。
@@ -980,10 +987,14 @@ P3 文書が衝突を「片方が失敗」としていた → 片方または両
   - test/golden.test.ts: `c10355a916176b20e1c8e670269326f7144d796934132fab9bf0f6941c9fb1a2`
   - test/__snapshots__/golden.test.ts.snap: `438edc59c158e0a6e973dd1bed330b92cea7fad0f0abfee9c064d91183e7dd2b`
 - 既存のテストで変えたのは import 先だけ。期待値・テスト名・場面・モックは変えていない。
-- test/purchase.test.ts を新しく足した: `choosePayment` の表と、同じモジュールで同時に動く 2 件の支払い
-  (USDC と JPYC など) の順番 (verify / 上流 / settle の fetch と応答)。golden は 1 件ずつ動かすので、
-  await の数で変わるこの順番は golden では見えない。期待値はリファクタ前のコード (a108724) で同じテストを
-  動かして得たもので、await を足していた版 (2030ccb〜8e536dc) では 3 件が失敗することを確かめた。
+- test/purchase.test.ts を新しく足した: `choosePayment` の表と、同じモジュールで同時に動くリクエストの順番。
+  golden は 1 件ずつ動かすので、ジョブの数で変わる順番は golden では見えない。期待値はどれもリファクタ前の
+  コード (a108724) で同じテストを動かして得たもの。
+  - 2 件の支払い (USDC と JPYC など) の verify / 上流 / settle の fetch と応答の順番。rail に await を足していた
+    版 (2030ccb〜8e536dc) では 3 件が失敗する。
+  - 支払いの settle の途中で始めた支払いなしのリクエストと、どちらが先に終わるか。境目の両側を置き、完了が
+    1 ジョブ早まっても遅れても失敗する。最後に runPurchase の Promise を引き継いでいた 3ad21de では
+    3 件が失敗する。
 
 ### わざと残したもの (後のフェーズで直す)
 

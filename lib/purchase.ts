@@ -1,14 +1,15 @@
-// 支払いのある /api/consult の 2 段。どの rail で払うかを決め (choosePayment)、
-// verify → 上流 → settle を 1 本の手順で動かす (runPurchase)。上流が失敗したら settle しない。
+// GET /api/consult の本体 (consult)。決済条件を読み、どの rail で払うかを決め (choosePayment)、
+// verify → 上流 → settle を 1 本の手順で動かす。上流が失敗したら settle しない。
 
 import { selectedAdapter } from './adapters';
 import { json402, jsonResponse } from './http';
+import { acceptsFor } from './listing';
 import { encodePaymentResponse, settlePayment, verifyPayment } from './openpay';
 import { decodePaymentHeader } from './paymentHeader';
 import { relayPayment } from './relay';
 import { ARC_NETWORKS } from './sellerPins';
 import type { PaymentRequirements, SettleResult, UsdcFace, UsdcRail, VerifyResult } from './types';
-import { isArcPayment, paymentRequiredHeaderFor } from './usdcFace';
+import { isArcPayment, paymentRequiredHeaderFor, usdcFace } from './usdcFace';
 
 // USDC 面がないとき、Base の支払いを名乗る X-PAYMENT は JPYC の facilitator に回さない。
 const BASE_NETWORKS = ['base', 'base-sepolia', 'eip155:8453', 'eip155:84532'];
@@ -22,7 +23,7 @@ type UsdcPurchase = {
   headers: { paymentSignatureHeader: string } | { paymentHeader: string };
   rail: UsdcRail;
 };
-export type Purchase = JpycPurchase | UsdcPurchase;
+type Purchase = JpycPurchase | UsdcPurchase;
 export type PaymentChoice = { kind: 'reply'; response: Response } | Purchase;
 
 /**
@@ -37,7 +38,7 @@ export function paymentRequired(
   return json402(usdc ? [...accepts, usdc.v1Accepts] : accepts, error, paymentRequiredHeaderFor(usdc));
 }
 
-// 支払いのヘッダーがあるときだけ呼ぶ (支払いなしの 402 と q の確認は route が先に済ませる)。
+// 支払いのヘッダーがあるときだけ呼ぶ (支払いなしの 402 と q の確認は consult が先に済ませる)。
 // 空の PAYMENT-SIGNATURE も支払いで、X-PAYMENT より優先する。network は完全一致でだけ比べる。
 export function choosePayment(
   { paymentHeader, paymentSignatureHeader }: PaymentHeaders,
@@ -87,7 +88,7 @@ function jpycRail(payload: unknown, accept: PaymentRequirements): PurchaseRail {
   return {
     verify: () => verifyPayment(payload, accept),
     settle: () => settlePayment(payload, accept),
-    // facilitator の JSON は加工しない。null だと runPurchase の isValid / success の読み取りが
+    // facilitator の JSON は加工しない。null だと consult の isValid / success の読み取りが
     // try の外で TypeError になり、GET から漏れる (Next の 500)。いまの挙動のまま残す (C1 で直す)。
     read: (body) => body,
     invalidFallback: 'invalid_payment',
@@ -110,14 +111,36 @@ function usdcRail({ face, headers, rail }: UsdcPurchase, jpycAccepts: PaymentReq
   };
 }
 
-// verify → 上流 → settle。失敗の 402 は rail によらず、支払える全 rail の決済条件で返す。
-export async function runPurchase(
-  purchase: Purchase,
-  q: string,
-  accepts: PaymentRequirements[],
-  usdc: UsdcFace | null,
-): Promise<Response> {
-  const rail = purchase.kind === 'jpyc' ? jpycRail(purchase.payload, accepts[0]) : usdcRail(purchase, accepts);
+// リクエスト全体を、この 1 つの async 関数の中で終える。途中で別の async 関数の Promise を return しない
+// (Promise を引き継ぐ分だけ完了が遅れ、同時に動く別のリクエストとの完了の順番が以前と変わる)。
+// 失敗の 402 は rail によらず、支払える全 rail の決済条件で返す。
+export async function consult(request: Request): Promise<Response> {
+  const paymentHeader = request.headers.get('X-PAYMENT');
+  const paymentSignatureHeader = request.headers.get('PAYMENT-SIGNATURE');
+  // 402 ゲートと掲載値の鮮度 (5 分 / 30 分) は必ずこの 1 変数から決める。
+  const hasPayment = Boolean(paymentHeader) || paymentSignatureHeader !== null;
+
+  let accepts: PaymentRequirements[];
+  let usdc: UsdcFace | null;
+  try {
+    accepts = await acceptsFor(request.url, { forPayment: hasPayment });
+    usdc = await usdcFace({ forPayment: hasPayment });
+  } catch {
+    return jsonResponse(500, { error: 'accepts_unavailable' });
+  }
+
+  if (!hasPayment) {
+    return paymentRequired(accepts, usdc, 'payment_required');
+  }
+
+  const q = new URL(request.url).searchParams.get('q');
+  if (!q) {
+    return jsonResponse(400, { error: 'q_required' });
+  }
+
+  const choice = choosePayment({ paymentHeader, paymentSignatureHeader }, accepts, usdc);
+  if (choice.kind === 'reply') return choice.response;
+  const rail = choice.kind === 'jpyc' ? jpycRail(choice.payload, accepts[0]) : usdcRail(choice, accepts);
 
   let verification: VerifyResult | Response;
   try {

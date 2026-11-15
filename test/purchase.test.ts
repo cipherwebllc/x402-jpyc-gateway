@@ -219,3 +219,75 @@ describe('two concurrent paid requests on one module', () => {
     expect(events).toEqual(expected);
   });
 });
+
+// 支払いの settle の途中で始まった支払いなしのリクエストと、どちらが先に終わるか。consult の最後で
+// 別の async 関数の Promise を返すと、支払いの完了だけが数ジョブ遅れて入れ替わる。境目の両側 (k と k+1) を
+// 置き、完了が 1 ジョブ早まっても遅れても失敗するようにしてある。期待値は a108724 で得た順番。
+describe('completion order of a paid request and an unpaid one started during its settle', () => {
+  const PAID: Record<string, Record<string, string>> = {
+    jpyc: { 'X-PAYMENT': paymentHeader },
+    base2: { 'PAYMENT-SIGNATURE': SIG_BASE },
+  };
+  let hook: 'fetch' | 'json' = 'json';
+  let startUnpaid: () => void = () => {};
+
+  beforeEach(async () => {
+    vi.resetModules();
+    vi.stubEnv('MY_RESOURCE_URL', resource);
+    vi.stubEnv('MY_RESOURCE_ID', resourceId);
+    vi.stubEnv('EXPECTED_RECIPIENT', merchant);
+    vi.stubEnv('EXPECTED_USDC_RECIPIENT', usdcMerchant);
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (!url.endsWith('/settle')) {
+        return response(url.includes('/discovery/') ? listing : url.includes('/requirements') ? usdcFace : { isValid: true });
+      }
+      if (hook === 'fetch') startUnpaid();
+      // settle の応答だけは素のオブジェクトにして、json() が呼ばれた時点をテストから掴む。
+      return {
+        status: 200,
+        ok: true,
+        json: () => {
+          if (hook === 'json') startUnpaid();
+          return Promise.resolve({ success: true, transaction: '0xsettled' });
+        },
+      } as unknown as Response;
+    }));
+    const { selectedAdapter } = await import('@/lib/adapters');
+    vi.mocked(selectedAdapter).mockReset().mockReturnValue(async () => ({ answer: 'answer' }));
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  it.each<[string, number, 'fetch' | 'json', string[]]>([
+    ['jpyc', 0, 'json', ['paid 200', 'unpaid 402']],
+    ['jpyc', 0, 'fetch', ['unpaid 402', 'paid 200']],
+    ['jpyc', 1, 'fetch', ['paid 200', 'unpaid 402']],
+    ['base2', 1, 'fetch', ['unpaid 402', 'paid 200']],
+    ['base2', 2, 'fetch', ['paid 200', 'unpaid 402']],
+  ])('%s paid, unpaid started %i microtasks after the settle %s()', async (rail, k, at, expected) => {
+    const { GET } = await import('@/app/api/consult/route');
+    expect((await GET(new Request(`${resource}?q=warm`))).status).toBe(402);
+    hook = at;
+    const order: string[] = [];
+    let unpaid: Promise<void> | undefined;
+    startUnpaid = () => {
+      let left = k;
+      const start = () => {
+        if (left-- > 0) return queueMicrotask(start);
+        unpaid = GET(new Request(`${resource}?q=unpaid`)).then((res) => { order.push(`unpaid ${res.status}`); });
+      };
+      queueMicrotask(start);
+    };
+
+    await GET(new Request(`${resource}?q=paid`, { headers: PAID[rail] }))
+      .then((res) => { order.push(`paid ${res.status}`); });
+    expect(unpaid).toBeDefined();
+    await unpaid;
+
+    expect(order).toEqual(expected);
+  });
+});
