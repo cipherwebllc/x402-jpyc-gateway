@@ -51,18 +51,52 @@ const idlFactory: Parameters<typeof Actor.createActor>[0] = () => {
 const IDENTITY_SLOTS = 8;
 const freeSlots = Array.from({ length: IDENTITY_SLOTS }, (_, slot) => slot);
 const waiting: Array<(slot: number) => void> = [];
+// 待ち行列を無制限にしない。超えた分は待たせずに断る (route が 502・未課金)。
+const MAX_WAITING = 32;
 
-function acquireSlot(): Promise<number> {
-  if (freeSlots.length === 0) return new Promise((resolve) => waiting.push(resolve));
-  // 別のインスタンスと同じ slot を選びにくくする (重なっても下の revision が混入を防ぐ)。
-  const index = Math.floor(Math.random() * freeSlots.length);
-  return Promise.resolve(freeSlots.splice(index, 1)[0]);
+// 1 リクエスト (slot の空き待ち + clear + send) の期限。応答しない呼び出しが slot を
+// 握り続けると後続が永久に待つので、期限で通信を打ち切り、slot を finally で返させる。
+const DEADLINE_MS = 120_000;
+const DEADLINE_EXCEEDED = 'coo-icp deadline exceeded';
+
+function acquireSlot(signal: AbortSignal): Promise<number> {
+  if (freeSlots.length > 0) {
+    // 別のインスタンスと同じ slot を選びにくくする (重なっても下の revision が混入を防ぐ)。
+    const index = Math.floor(Math.random() * freeSlots.length);
+    return Promise.resolve(freeSlots.splice(index, 1)[0]);
+  }
+  if (waiting.length >= MAX_WAITING) return Promise.reject(new Error('coo-icp is busy'));
+  return new Promise((resolve, reject) => {
+    waiting.push(resolve);
+    // 期限が来た待ち手は列から外す。外した待ち手に slot を渡すと、誰も返さずに失われる。
+    // (先に slot を受け取っていれば reject は何もせず、呼び出し側が期限を見て返す。)
+    signal.addEventListener('abort', () => {
+      const index = waiting.indexOf(resolve);
+      if (index >= 0) waiting.splice(index, 1);
+      reject(new Error(DEADLINE_EXCEEDED));
+    }, { once: true });
+  });
 }
 
 function releaseSlot(slot: number): void {
   const next = waiting.shift();
   if (next) next(slot);
   else freeSlots.push(slot);
+}
+
+async function withDeadline<T>(run: (signal: AbortSignal) => Promise<T>): Promise<T> {
+  const deadline = new AbortController();
+  // AbortSignal.timeout ではなく setTimeout にするのは、テストの fake timers で進められるようにするため。
+  const timer = setTimeout(() => deadline.abort(), DEADLINE_MS);
+  try {
+    return await run(deadline.signal);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function throwIfExpired(signal: AbortSignal): void {
+  if (signal.aborted) throw new Error(DEADLINE_EXCEEDED);
 }
 
 // slot 0 は以前の版と同じ principal (sha256(seed))。
@@ -78,27 +112,42 @@ export const cooIcpAdapter: Adapter = async ({ q }) => {
   const seed = process.env.IC_IDENTITY_SEED;
   if (!seed) throw new Error('IC_IDENTITY_SEED is not set');
 
-  const slot = await acquireSlot();
-  try {
-    const agent = await HttpAgent.create({
-      host: process.env.IC_HOST || 'https://icp-api.io',
-      identity: identityForSlot(seed, slot),
-      shouldFetchRootKey: false,
-      shouldSyncTime: false,
-      logToConsole: false,
-    });
-    const actor = Actor.createActor<CooActor>(idlFactory, { agent, canisterId });
-    // 1 支払い = 独立した 1 問 1 答: 会話を空にし、その revision の続きとしてだけ送る。
-    // 別のインスタンスが同じ slot を先に動かしていれば canister が Conflict / Busy / Cleared で
-    // 断るので、他の買い手の質問が文脈に混ざることはない。
-    const revision = await actor.clear_conversation();
-    const result = await actor.send_message(randomUUID(), revision, q);
-    // Err は上流失敗として throw → route が settle せず 502 (未課金)。理由の本文は載せない。
-    if (!('Ok' in result)) {
-      throw new Error(`coo-icp send_message returned ${Object.keys(result.Err)[0]}`);
+  return withDeadline(async (signal) => {
+    const slot = await acquireSlot(signal);
+    try {
+      throwIfExpired(signal);
+      const agent = await HttpAgent.create({
+        host: process.env.IC_HOST || 'https://icp-api.io',
+        identity: identityForSlot(seed, slot),
+        // SDK の通信すべてに期限の signal を付け、止まった通信を期限で打ち切る。SDK 自身の signal
+        // (init でも Request の中でも) は Request にまとめてから、期限と合わせて残す。
+        fetch: (input, init) => {
+          const request = new Request(input, init);
+          return fetch(request, { signal: AbortSignal.any([request.signal, signal]) });
+        },
+        shouldFetchRootKey: false,
+        shouldSyncTime: false,
+        logToConsole: false,
+      });
+      const actor = Actor.createActor<CooActor>(idlFactory, { agent, canisterId });
+      // 1 支払い = 独立した 1 問 1 答: 会話を空にし、その revision の続きとしてだけ送る。
+      // 別のインスタンスが同じ slot を先に動かしていれば canister が Conflict / Busy / Cleared で
+      // 断るので、他の買い手の質問が文脈に混ざることはない。
+      const revision = await actor.clear_conversation();
+      // 期限を過ぎてから clear が返っても、もう送らない (502 になる要求で生成を始めない)。
+      throwIfExpired(signal);
+      const result = await actor.send_message(randomUUID(), revision, q);
+      // Err は上流失敗として throw → route が settle せず 502 (未課金)。理由の本文は載せない。
+      if (!('Ok' in result)) {
+        throw new Error(`coo-icp send_message returned ${Object.keys(result.Err)[0]}`);
+      }
+      return { answer: result.Ok.reply };
+    } catch (error) {
+      // 期限で打ち切った失敗は、SDK の文面ではなく固定の文言にする。
+      throwIfExpired(signal);
+      throw error;
+    } finally {
+      releaseSlot(slot);
     }
-    return { answer: result.Ok.reply };
-  } finally {
-    releaseSlot(slot);
-  }
+  });
 };

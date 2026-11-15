@@ -63,9 +63,10 @@ coo-icp は 0.7.0 で `chat` を削除しました。このゲートウェイは
 coo-icp canister は caller (principal) ごとに会話を 1 つ持ち、LLM のコンテキストに使います。ゲートウェイは「1 支払い = 独立した 1 問 1 答」のために次のようにします。
 
 - 毎回 `clear_conversation` で会話を空にし、返ってきた revision の続きとしてだけ `send_message` を送ります。
-- `IC_IDENTITY_SEED` から作った 8 個の identity のうち、空いている 1 つを 1 リクエストが使い終わるまで占有します。同時のリクエストは別々の会話になり、9 件目からは空きを待ちます。
-- 複数のインスタンスが同じ identity を同時に使った場合は、canister が片方を `Busy`・`Conflict`・`Cleared` で断ります。断られたリクエストは `502 upstream_error` (未課金) になり、他の買い手の質問が文脈に混ざることはありません。
-- 質問と回答は、その identity が次に使われるまで canister に残ります。読めるのは `IC_IDENTITY_SEED` を持つ人と canister の管理者です。
+- `IC_IDENTITY_SEED` から作った 8 個の identity のうち、空いている 1 つを 1 リクエストが使い終わるまで占有します。同時のリクエストは別々の会話になり、9 件目からは空きを待ちます。空きを待てるのは 32 件までで、それを超えたリクエストは待たずに `502 upstream_error` (未課金) になります。
+- 1 リクエストは、空きを待つ時間も含めて 120 秒たつと打ち切りを始めます。通信の中断が終わるまでに、さらに 10 秒ほどかかることがあります。打ち切ったリクエストは `502 upstream_error` (未課金) になり、占有していた identity は空きに戻ります。ゲートウェイは回答を受け取らず、買い手にも渡しませんが、canister 側では生成が続き、質問と回答が保存されることがあります。
+- 複数のインスタンスが同じ identity を同時に使った場合は、canister が片方または両方を `Busy`・`Conflict`・`Cleared` で断ります (例: A の生成中に B が clear すると A は `Cleared` になり、B の `send_message` も A がまだ動いているので `Busy` になります)。断られたリクエストは `502 upstream_error` (未課金) になり、他の買い手の質問が文脈に混ざることはありません。
+- 質問と回答は、その identity で次に `clear_conversation` が成功するまで canister の会話に残ります。読めるのは `IC_IDENTITY_SEED` を持つ人と canister の管理者です。clear が消すのは動作中の会話だけです。canister がアップグレード時に書いた保存データやスナップショットには、消したあとも写しが残ることがあり、管理者はそれを読めます (coo-icp の README の Known gaps)。
 - canister の上限 (質問は 4,000 バイトまで、同時 20 件、モデル呼び出しは 1 分に 60 回) を超えた場合も `502 upstream_error` (未課金) です。
 
 ## Vercel へのデプロイ

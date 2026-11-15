@@ -834,27 +834,67 @@ clear_conversation : () -> (nat64);   // 新しい revision
    `sha256(seed + "\n" + n)`。数を固定するのは、canister に残す会話を増やし続けないため
    (リクエストごとに新しい identity を作ると、clear に失敗した会話が誰にも消せずに残る)。
 2. 1 リクエストは空いている slot を 1 つ、使い終わるまで占有する (プロセス内)。空きがなければ待つ。
-   空きの中からはランダムに選び、別のインスタンスと重なりにくくする。
+   空きの中からはランダムに選び、別のインスタンスと重なりにくくする。空いた slot は待っている中で
+   いちばん古いリクエストに渡す。待てるのは 32 件 (`MAX_WAITING`) までで、超えたら待たせずに
+   throw する (`coo-icp is busy`)。
 3. `clear_conversation()` の返す revision を `base_revision` にして `send_message(UUID, revision, q)` を呼ぶ。
 4. `Ok` → `{ answer: reply }`。`Err` → throw (route が 502・未課金)。エラーの本文は載せず、種類の名前だけを使う。
 5. `IC_IDENTITY_SEED` が未設定なら canister を呼ばずに throw する。
+6. 1 リクエスト (slot の空き待ち + clear + send) に 120 秒 (`DEADLINE_MS`) の期限を付ける (下の「期限と待ち行列」)。
+
+### 期限と待ち行列 (コードレビュー対応・2026-11-15)
+
+Codex (読むだけ) の指摘: 呼び出しが返らないと `finally` が走らず slot が戻らない。8 個とも止まると、
+その後のリクエストは無制限の待ち行列で永久に待つ。対応:
+
+- 期限は `AbortController` を `setTimeout` で abort する (`AbortSignal.timeout` は fake timers で
+  進められないため使わない)。終わったら必ず timer を消す。
+- `HttpAgent.create({ fetch })` で SDK の通信すべてに期限の signal を付ける (SDK が signal を渡したときは
+  `AbortSignal.any` で両方)。期限で止まった通信が reject し、SDK の呼び出しが失敗して、slot は既存の
+  `finally` で戻る。期限による失敗は SDK の文面ではなく固定の `coo-icp deadline exceeded` で throw する。
+- slot を得た直後と、clear と send の間で期限を確かめる。期限を過ぎてから clear が返っても send しない
+  (502 になるリクエストで生成を始めない)。
+- 待っている間に期限が来たリクエストは、待ち行列から外して同じ文言で reject する。外したリクエストに
+  slot を渡すと誰も返さずに失われるので、渡さない。
+- 期限・待ち行列の上限のどちらも route では `502 upstream_error` (未課金)。
+- 受け入れた制限 (修正差分の確認で Codex が実測):
+  - 120 秒は「完了の期限」ではなく「打ち切りを始める時刻」。SDK は失敗した通信を間を置いて数回やり直し、
+    update call の結果待ち (polling) の合間の待ち時間は abort で短くならない。本物の SDK と模擬の通信で、
+    完了は 121.8 秒 (通信中) と 132.5 秒 (polling 中) だった。slot が戻るのもその時点。
+  - 期限は canister 側の生成を止めない。送信済みの `send_message` は canister で最後まで動き、その後に
+    clear が入らなければ質問と回答が保存される。ゲートウェイは回答を受け取らず、買い手にも渡さない。
+    まだ生成中の slot を次に使ったリクエストは `Busy` で 502 になりうる。
+  - clear が消すのは canister の動作中の状態にある会話だけ。前回のアップグレードで stable memory に
+    書かれた写しとスナップショットは残り、canister の管理者は読める (coo-icp README の Known gaps)。
+- SDK が signal を `Request` の中に入れて渡しても落とさないよう、`fetch` には `new Request(input, init)` に
+  まとめてから、その signal と期限の signal を `AbortSignal.any` で合わせて渡す (いまの SDK は init で渡す)。
 
 ### 以前の「受け入れた制限」がどう変わったか
 
 §6 は「並行リクエストの clear / chat の交錯で文脈が混ざりうる (許容)」としていた。0.7.0 では
-revision のおかげで、同じ identity を 2 つのリクエストが同時に使っても混ざらない: 後から clear した側だけが
-その revision で送れ、先の側は `Cleared` か `Conflict` か `Busy` で失敗する (未課金)。プロセス内では
-slot の占有でそもそも重ならない。残る制限は「インスタンスをまたいで同じ slot が重なると片方が 502 になる」
-ことと、「質問と回答がその slot の次の利用まで canister に残る」こと。
+revision のおかげで、同じ identity を 2 つのリクエストが同時に使っても混ざらない: 送れるのは後から clear
+した側だけで、先の側は `Cleared` か `Conflict` か `Busy` で失敗する (未課金)。後から clear した側も、
+先の側の生成がまだ終わっていなければ `Busy` で失敗する (A の生成中に B が clear → B の send は `Busy`、
+A は `Cleared`)。つまり片方または両方が失敗しうるが、文脈は混ざらない。プロセス内では slot の占有で
+そもそも重ならない。残る制限は「インスタンスをまたいで同じ slot が重なると片方または両方が 502 になる」
+ことと、「質問と回答がその slot で次に clear が成功するまで canister に残る」こと。
 
 ### テスト (`test/coo-icp.test.ts`)
 
 呼び出しの順番を見るだけのモックをやめ、0.7.0 の動き (caller ごとの会話・revision・Busy・Conflict・
-Cleared・request id の形式) を模したモデルに対して確認する。Candid は本物の IDL を使い、引数と返り値が
-canister の型で往復することを確かめる。確認する内容: 前の買い手の質問が次の回答に入らない /
-同時 3 件が別々の会話になる / 9 件目以降は待つ (同時に動くのは 8 件まで) / 失敗しても slot を返す /
+Cleared・request id の形式) を模したモデルに対して確認する。Candid は本物の IDL を使う。canister の型は
+テストの中にアダプタとは別に書き、アダプタが encode した引数を canister の型で、canister の型で encode した
+返り値をアダプタの型で decode できることを確かめる (`clear_conversation` の引数は 0 個)。アダプタの IDL を
+わざと壊すと (revision を `int64`・`nat` に、引数の順番違い、clear に引数、`Ok` から revision を抜く、
+`Conflict` を抜く、query にする) このテストが失敗することを確認した。確認する内容: 前の買い手の質問が
+次の回答に入らない / 同時 3 件が別々の会話になる / 9 件目以降は待つ (同時に動くのは 8 件まで) /
+`Err`・`HttpAgent.create` の失敗・`clear_conversation` の失敗のどれでも 8 個の slot がすべて戻る /
 別のインスタンスが同じ identity を使ったら混ざらずに失敗する / identity は seed だけで決まり、
 slot 0 は `sha256(seed)` / env が欠けていれば canister を呼ばない / エラーに遠隔の本文を載せない。
+期限と待ち行列は fake timers で確認する: 通信が止まった 8 件は期限ちょうどに固定の文言で失敗し、その後
+8 件が同時に動く (止まった通信は、SDK に渡した `fetch` の signal でしか終わらない) / SDK が渡す signal も
+効く / 待ち行列で期限が来たリクエストは失敗し、slot を受け取らない / 33 件目の待ちはすぐ断る /
+期限後に clear が返っても `send_message` を呼ばない。
 
 ### 実機確認 (2026-11-15・mainnet・使い捨ての seed)
 
@@ -862,3 +902,19 @@ slot 0 は `sha256(seed)` / env が欠けていれば canister を呼ばない /
 - 新アダプタで 1 件: 約 7.5 秒で回答。同時 2 件: 両方成功 (約 7.1 秒)。
 - 同じ identity で 2 件続けて送り、2 件目が 1 件目の合言葉を知らないこと (文脈が混ざらない) を確認。
 - 確認に使った会話は clear 済み (残ったメッセージ 0 件)。
+- 期限と `fetch` の差し替えを入れた最終版でも再確認した: 同時 4 件を 2 回と同時 3 件を 1 回送り、
+  全件が自分の合言葉だけを返した。canister に保存された会話も、それぞれ自分の 1 往復だけだった。
+  4,000 バイトを超える質問は `Invalid` で断られた (route では 502・未課金)。
+- 注意: 「1 文字だけ返して」のようなあいまいな質問では、モデルが質問と違う文字を返すことがあった。
+  保存された会話を読んで、混入ではなくモデルの応答のぶれだと確かめた。
+
+### コードレビュー裁定 (Codex gpt-6.1-sol xHigh・読むだけ, 2026-11-15)
+
+1 回目 (P0・P1 なし): P2 呼び出しが返らないと slot が尽きる・待ち行列が無制限 → 期限と上限 (上の
+「期限と待ち行列」)。P3 IDL のテストが引数の型違いを通す → canister の型をテスト側に別に書いて相互に
+decode。P3 slot の返却テストが `Err` しか見ていない → agent の作成失敗と clear の throw も追加。
+P3 文書が衝突を「片方が失敗」としていた → 片方または両方。すべて採用 (修正は Opus 5.5)。
+
+2 回目 (修正差分・P0〜P2 なし): P3 120 秒は完了の期限ではない / P3 「回答は捨てられる」「clear で消える」
+は言い過ぎ / P3 `Request` の中の signal を落とす (いまの SDK では起きない)。すべて採用。生き残った変異
+(FIFO を LIFO に・timer を消さない・SDK の signal だけ残す) にもテストを足し、検出することを確かめた。
