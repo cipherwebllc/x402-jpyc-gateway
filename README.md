@@ -2,12 +2,12 @@
 
 **既存の API を 1 行も変更せずに、JPYC の「1 支払い = 1 リクエスト」API にするゲートウェイ**です。AWS WAF や Cloudflare が示した「インフラ側で x402 化する」アプローチの日本円 (JPYC) 版 — アプリの前段にこのプロキシを置くだけで、AI エージェントが [OpenPay AI ストア](https://open-pay.jp/discovery)経由であなたの API に都度課金できるようになります。
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fcipherwebllc%2Fx402-jpyc-gateway&env=MY_RESOURCE_URL,MY_RESOURCE_ID,EXPECTED_RECIPIENT,ADAPTER,UPSTREAM_URL,IC_IDENTITY_SEED&envDescription=MY_RESOURCE_URL%2C%20MY_RESOURCE_ID%20and%20EXPECTED_RECIPIENT%20are%20required.%20For%20a%20first%20deployment%2C%20follow%20the%20README%20placeholder%20setup.%20EXPECTED_USDC_RECIPIENT%20is%20optional%20and%20enables%20USDC.&project-name=x402-jpyc-gateway&repository-name=x402-jpyc-gateway)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fcipherwebllc%2Fx402-jpyc-gateway&env=MY_RESOURCE_URL,MY_RESOURCE_ID,EXPECTED_RECIPIENT,ADAPTER,UPSTREAM_URL,COO_CANISTER_ID,IC_IDENTITY_SEED&envDescription=MY_RESOURCE_URL%2C%20MY_RESOURCE_ID%20and%20EXPECTED_RECIPIENT%20are%20required.%20For%20a%20first%20deployment%2C%20follow%20the%20README%20placeholder%20setup.%20EXPECTED_USDC_RECIPIENT%20is%20optional%20and%20enables%20USDC.&project-name=x402-jpyc-gateway&repository-name=x402-jpyc-gateway)
 
 アダプタ式で、同梱は 2 種:
 
 - `http` — **任意の JSON API** に中継 (コード変更ゼロの課金化)
-- `coo-icp` (既定) — Internet Computer の coo-icp canister (`chat : (text) -> (text)`) に中継。[動作確認済み](https://open-pay.jp/discovery)
+- `coo-icp` (既定) — Internet Computer の coo-icp canister (0.7.0 以降の `send_message`) に中継。[動作確認済み](https://open-pay.jp/discovery)
 
 決済の実体 (署名検証・オンチェーン決済・手数料分割) は OpenPay のファシリテーターが行い、このゲートウェイは鍵もお金も持ちません。
 
@@ -47,7 +47,7 @@ npm run dev
 | `ADAPTER` | いいえ | `coo-icp`（既定）または `http` |
 | `COO_CANISTER_ID` | `coo-icp` 時 | coo-icp の canister ID |
 | `IC_HOST` | いいえ | IC エンドポイント。既定は `https://icp-api.io` |
-| `IC_IDENTITY_SEED` | 強く推奨 | 設定時は SHA-256 から決定的な Ed25519 identity を生成。未設定なら匿名 identity になるが、coo-icp は caller 毎に会話履歴を保持し**匿名 principal の履歴は誰でも読める**ため、必ずランダムな秘密値を設定すること |
+| `IC_IDENTITY_SEED` | `coo-icp` 時 | ランダムな秘密値。ここから canister を呼ぶ identity (Ed25519) を 8 個、決定的に作ります。coo-icp は匿名の呼び出しを受け付けないので、未設定だと支払いのあるリクエストは `502 upstream_error` になります (未課金)。値を知る人はゲートウェイの会話を読めるので、公開しないこと |
 | `UPSTREAM_URL` | `http` 時 | JSON を返す上流 API URL |
 
 必須設定の欠落、出品 ID の前後の空白、不正な受取アドレスは、起動時に `OpenPay seller gate: ...` でまとめて報告します。受取先にゼロアドレスや既知の burn アドレス (`0x000000000000000000000000000000000000dEaD`、`0xdead000000000000000000000000000000000000`) は指定できません。設定エラー中は `/` を含む全ルートが利用できません。
@@ -56,9 +56,18 @@ npm run dev
 
 受取先を変更するときは、OpenPay 側の登録と対応する `EXPECTED_RECIPIENT` / `EXPECTED_USDC_RECIPIENT` を揃えて更新し、再デプロイしてください。切替途中は pin 不一致による 500 を想定してください。
 
-`http` アダプタは `UPSTREAM_URL` に `q` クエリを付けて GET し、その JSON を返します。coo-icp は `chat(q)` の応答を `{ "answer": "..." }` として返します。
+`http` アダプタは `UPSTREAM_URL` に `q` クエリを付けて GET し、その JSON を返します。coo-icp は `send_message` の回答を `{ "answer": "..." }` として返します。
 
-coo-icp canister は caller (principal) 毎に会話履歴を蓄積して LLM のコンテキストに使うため、ゲートウェイは「1 支払い = 独立した 1 問 1 答」を守る目的で毎回 `chat` の前に `clear_conversation` を呼びます (per-caller なので他の利用者の会話には影響しません)。なお同時に複数の支払いリクエストが重なった場合、clear と chat の間に他のリクエストが割り込み、直前の質問が文脈に混ざる可能性が理論上残ります (低トラフィックでは実質問題になりません)。
+coo-icp は 0.7.0 で `chat` を削除しました。このゲートウェイは 0.7.0 以降の canister だけに対応します (それより前の canister には使えません)。
+
+coo-icp canister は caller (principal) ごとに会話を 1 つ持ち、LLM のコンテキストに使います。ゲートウェイは「1 支払い = 独立した 1 問 1 答」のために次のようにします。
+
+- 毎回 `clear_conversation` で会話を空にし、返ってきた revision の続きとしてだけ `send_message` を送ります。
+- `IC_IDENTITY_SEED` から作った 8 個の identity のうち、空いている 1 つを 1 リクエストが使い終わるまで占有します。同時のリクエストは別々の会話になり、9 件目からは空きを待ちます。空きを待てるのは 32 件までで、それを超えたリクエストは待たずに `502 upstream_error` (未課金) になります。
+- 1 リクエストは、空きを待つ時間も含めて 120 秒たつと打ち切りを始めます。通信の中断が終わるまでに、さらに 10 秒ほどかかることがあります。打ち切ったリクエストは `502 upstream_error` (未課金) になり、占有していた identity は空きに戻ります。ゲートウェイは回答を受け取らず、買い手にも渡しませんが、canister 側では生成が続き、質問と回答が保存されることがあります。
+- 複数のインスタンスが同じ identity を同時に使った場合は、canister が片方または両方を `Busy`・`Conflict`・`Cleared` で断ります (例: A の生成中に B が clear すると A は `Cleared` になり、B の `send_message` も A がまだ動いているので `Busy` になります)。断られたリクエストは `502 upstream_error` (未課金) になり、他の買い手の質問が文脈に混ざることはありません。
+- 質問と回答は、その identity で次に `clear_conversation` が成功するまで canister の会話に残ります。読めるのは `IC_IDENTITY_SEED` を持つ人と canister の管理者です。clear が消すのは動作中の会話だけです。canister がアップグレード時に書いた保存データやスナップショットには、消したあとも写しが残ることがあり、管理者はそれを読めます (coo-icp の README の Known gaps)。
+- canister の上限 (質問は 4,000 バイトまで、同時 20 件、モデル呼び出しは 1 分に 60 回) を超えた場合も `502 upstream_error` (未課金) です。
 
 ## Vercel へのデプロイ
 
