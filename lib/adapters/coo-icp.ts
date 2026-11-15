@@ -1,54 +1,104 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 
-import { Actor, AnonymousIdentity, HttpAgent, type ActorMethod } from '@icp-sdk/core/agent';
+import { Actor, HttpAgent, type ActorMethod } from '@icp-sdk/core/agent';
 import { IDL } from '@icp-sdk/core/candid';
 import { Ed25519KeyIdentity } from '@icp-sdk/core/identity';
 
 import type { Adapter } from './types';
 
-// 実 canister の Candid (メタデータ candid:service で確認):
-//   chat : (text) -> (variant { Ok : text; Err : text })
-type ChatResult = { Ok: string } | { Err: string };
+// coo-icp 0.7.0 の Candid (mainnet の candid:service で確認 2026-11-15)。0.7.0 で `chat` は削除された:
+//   send_message : (request_id : text, base_revision : nat64, content : text)
+//       -> (variant { Ok : record { reply : text; revision : nat64 }; Err : ChatError })
+//   clear_conversation : () -> (nat64)   // 新しい revision
+type ChatError =
+  | { Invalid: string }
+  | { Failed: string }
+  | { Busy: null }
+  | { Cleared: null }
+  | { InProgress: null }
+  | { Conflict: null };
+type SendResult = { Ok: { reply: string; revision: bigint } } | { Err: ChatError };
 
 type CooActor = {
-  chat: ActorMethod<[string], ChatResult>;
-  clear_conversation: ActorMethod<[], undefined>;
+  send_message: ActorMethod<[string, bigint, string], SendResult>;
+  clear_conversation: ActorMethod<[], bigint>;
 };
 
-const idlFactory: Parameters<typeof Actor.createActor>[0] = () =>
-  IDL.Service({
-    chat: IDL.Func([IDL.Text], [IDL.Variant({ Ok: IDL.Text, Err: IDL.Text })], []),
-    clear_conversation: IDL.Func([], [], []),
+const idlFactory: Parameters<typeof Actor.createActor>[0] = () => {
+  const ChatError = IDL.Variant({
+    Invalid: IDL.Text,
+    Failed: IDL.Text,
+    Busy: IDL.Null,
+    Cleared: IDL.Null,
+    InProgress: IDL.Null,
+    Conflict: IDL.Null,
   });
+  const Sent = IDL.Record({ reply: IDL.Text, revision: IDL.Nat64 });
+  return IDL.Service({
+    send_message: IDL.Func(
+      [IDL.Text, IDL.Nat64, IDL.Text],
+      [IDL.Variant({ Ok: Sent, Err: ChatError })],
+      [],
+    ),
+    clear_conversation: IDL.Func([], [IDL.Nat64], []),
+  });
+};
 
-function identityForEnvironment(): AnonymousIdentity | Ed25519KeyIdentity {
-  const seed = process.env.IC_IDENTITY_SEED;
-  if (!seed) return new AnonymousIdentity();
+// canister は caller (principal) ごとに会話を 1 つ持ち、同じ caller の 2 つ目の要求は Busy、
+// clear は生成中の回答を取り消す。買い手ごとに会話を分けるため、seed から決まる identity を
+// IDENTITY_SLOTS 個持ち、1 つの要求が 1 つを使い終わるまで占有する。数を固定するのは、
+// canister に残す会話の数を増やし続けないため。
+const IDENTITY_SLOTS = 8;
+const freeSlots = Array.from({ length: IDENTITY_SLOTS }, (_, slot) => slot);
+const waiting: Array<(slot: number) => void> = [];
 
-  const digest = createHash('sha256').update(seed).digest();
-  return Ed25519KeyIdentity.generate(new Uint8Array(digest));
+function acquireSlot(): Promise<number> {
+  if (freeSlots.length === 0) return new Promise((resolve) => waiting.push(resolve));
+  // 別のインスタンスと同じ slot を選びにくくする (重なっても下の revision が混入を防ぐ)。
+  const index = Math.floor(Math.random() * freeSlots.length);
+  return Promise.resolve(freeSlots.splice(index, 1)[0]);
+}
+
+function releaseSlot(slot: number): void {
+  const next = waiting.shift();
+  if (next) next(slot);
+  else freeSlots.push(slot);
+}
+
+// slot 0 は以前の版と同じ principal (sha256(seed))。
+function identityForSlot(seed: string, slot: number): Ed25519KeyIdentity {
+  const material = slot === 0 ? seed : `${seed}\n${slot}`;
+  return Ed25519KeyIdentity.generate(new Uint8Array(createHash('sha256').update(material).digest()));
 }
 
 export const cooIcpAdapter: Adapter = async ({ q }) => {
   const canisterId = process.env.COO_CANISTER_ID;
   if (!canisterId) throw new Error('COO_CANISTER_ID is not set');
+  // canister は匿名の caller を受け付けない。
+  const seed = process.env.IC_IDENTITY_SEED;
+  if (!seed) throw new Error('IC_IDENTITY_SEED is not set');
 
-  const identity = identityForEnvironment();
-  const agent = await HttpAgent.create({
-    host: process.env.IC_HOST || 'https://icp-api.io',
-    identity,
-    shouldFetchRootKey: false,
-    shouldSyncTime: false,
-    logToConsole: false,
-  });
-  const actor = Actor.createActor<CooActor>(idlFactory, { agent, canisterId });
-  // canister は caller (principal) 毎に会話履歴を蓄積し LLM コンテキストに使う。
-  // 1 支払い = 独立した 1 問 1 答にするため、毎回 chat の前に自分の会話だけを消す
-  // (per-caller なので他利用者の会話には影響しない)。
-  await actor.clear_conversation();
-  const result = await actor.chat(q);
-  // Err は上流失敗として throw → route が settle せず 502 (未課金)
-  if (!('Ok' in result)) throw new Error('coo-icp chat returned Err');
-
-  return { answer: result.Ok };
+  const slot = await acquireSlot();
+  try {
+    const agent = await HttpAgent.create({
+      host: process.env.IC_HOST || 'https://icp-api.io',
+      identity: identityForSlot(seed, slot),
+      shouldFetchRootKey: false,
+      shouldSyncTime: false,
+      logToConsole: false,
+    });
+    const actor = Actor.createActor<CooActor>(idlFactory, { agent, canisterId });
+    // 1 支払い = 独立した 1 問 1 答: 会話を空にし、その revision の続きとしてだけ送る。
+    // 別のインスタンスが同じ slot を先に動かしていれば canister が Conflict / Busy / Cleared で
+    // 断るので、他の買い手の質問が文脈に混ざることはない。
+    const revision = await actor.clear_conversation();
+    const result = await actor.send_message(randomUUID(), revision, q);
+    // Err は上流失敗として throw → route が settle せず 502 (未課金)。理由の本文は載せない。
+    if (!('Ok' in result)) {
+      throw new Error(`coo-icp send_message returned ${Object.keys(result.Err)[0]}`);
+    }
+    return { answer: result.Ok.reply };
+  } finally {
+    releaseSlot(slot);
+  }
 };

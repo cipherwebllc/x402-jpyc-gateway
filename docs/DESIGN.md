@@ -8,7 +8,7 @@ Date: 2026-07-15 (seller pin 対応: 2026-09-23、§15)
 OpenPay (open-pay.jp) の x402 ファシリテーターを使い、任意の上流 API を
 「1 支払い = 1 リクエスト」で JPYC 課金化する汎用ゲートウェイ。
 Next.js App Router (TypeScript)、Vercel にデプロイ可能。
-第 1 アダプタは coo-icp (Internet Computer 上の Rust canister、Candid `chat : (text) -> (text)`)。
+第 1 アダプタは coo-icp (Internet Computer 上の Rust canister。0.7.0 以降の `send_message`、§18)。
 
 ## 2. 非ゴール (やらないこと)
 
@@ -27,7 +27,7 @@ lib/openapi.ts            x402scan 用の OpenAPI 文書。検証だけ共有し
 instrumentation.ts       Next.js サーバー起動時の必須設定検査
 lib/adapters/types.ts     Adapter = (input: { q: string }) => Promise<unknown>
 lib/adapters/http.ts      汎用: UPSTREAM_URL に ?q= を付けて GET、JSON 中継
-lib/adapters/coo-icp.ts   @icp-sdk/core (agent) で canister chat(text) を update call
+lib/adapters/coo-icp.ts   @icp-sdk/core (agent) で canister の clear_conversation → send_message を update call (§18)
 lib/adapters/index.ts     env ADAPTER による選択 (coo-icp | http)
 app/api/consult/route.ts  GET ハンドラ (処理順は §5)
 app/openapi.json/route.ts GET ハンドラ (lib/openapi.ts の文書を返す・確認できなければ 404)
@@ -98,6 +98,7 @@ GET /api/consult?q=...
 
 - 選択: `ADAPTER` env (`coo-icp` がデフォルト / `http`)。未知値は throw → route が 502 に変換
   (verify 済み・未課金なので買い手に損は出ない)。
+- **以下の coo-icp の記述は 0.6.0 までのもの。0.7.0 以降の契約は §18 が正。**
 - `coo-icp`: IC 公式 JS SDK の HttpAgent + Actor。**パッケージは `@icp-sdk/core` を採用**
   (`@dfinity/agent` は 2025-08 以降 deprecated で `@icp-sdk/core` が公式後継。import は
   `@icp-sdk/core/agent` / `@icp-sdk/core/candid` 等のサブパス)。IDL は実 canister の
@@ -127,7 +128,7 @@ GET /api/consult?q=...
 | ADAPTER | - | `coo-icp` (default) / `http` |
 | COO_CANISTER_ID | coo-icp 時 ✔ | バックエンド canister ID |
 | IC_HOST | - | default `https://icp-api.io` |
-| IC_IDENTITY_SEED | - | 未設定なら匿名 identity |
+| IC_IDENTITY_SEED | coo-icp 時 ✔ | canister を呼ぶ identity の元。未設定なら 502 (§18) |
 | UPSTREAM_URL | http 時 ✔ | 中継先 |
 
 価格・手数料はカタログ値を使い、受取ウォレットは自分の設定で固定して照合する。
@@ -157,8 +158,7 @@ Codex レビュー採用分の追加ケース:
 | 12 | q が空文字 (`?q=`) | 400 扱い (欠落と同じ) |
 | 13 | resource 差し替えが MY_RESOURCE_URL 基準 | リクエスト Host が異なっても resource は MY_RESOURCE_URL+query |
 
-アダプタ (`test/coo-icp.test.ts`): Actor をモックし q → chat(q) → `{ answer }` の写像を確認。
-canister ID / host / identity (匿名・seed) の受け渡しも確認。
+アダプタ (`test/coo-icp.test.ts`): §18 を参照 (canister の動きを模したモデルに対して確認する)。
 http アダプタも fetch モックで: q のエンコード・非 2xx で throw・JSON 中継。
 
 注意: モジュールレベルの accepts キャッシュはテスト間で `resetAcceptsCache()` によりリセット。
@@ -804,3 +804,61 @@ relay (OpenPay `feat/relay-arc`):
 - minor (採用): 「relay が拒否する」はずのテストが成功を許していた。→ テストの relay モックに rail ルール
   (pin と支払いの rail が違えば 409) を入れ、「Base のみの face を持つゲートウェイで Arc 支払い → 409 →
   取り直して Arc 入りの 402 → 再署名で 200」の回復と、Arc を落とした face では上流が一度も動かないことを固定。
+
+## 18. coo-icp 0.7.0 への追従 (2026-11-15)
+
+### きっかけ
+
+全コードベースのレビュー中に、mainnet の canister (`4wfup-gqaaa-aaaas-qdqca-cai`) が 0.7.0 に上がり、
+`chat` が削除されていると分かった (`candid:service` と `version` を読み取りで確認)。それまでのアダプタは
+`clear_conversation` のあと `chat` を呼ぶので、支払いのあるリクエストは verify を通ったあと必ず
+`502 upstream_error` になる (settle の前なので未課金)。
+
+### 0.7.0 の契約 (dwebxr/coo-icp の README と `eliza_backend.did`)
+
+```candid
+send_message : (request_id : text, base_revision : nat64, content : text)
+    -> (variant { Ok : record { reply : text; revision : nat64 }; Err : ChatError });
+clear_conversation : () -> (nat64);   // 新しい revision
+```
+
+- 会話は caller ごとに 1 つ。保存と clear のたびに revision が進み、戻らない。
+- `base_revision` が会話の revision と違えば `Conflict` で、何も実行されない。
+- 同じ caller の 2 つ目の要求は `Busy`。clear は生成中の回答を取り消し、その要求は `Cleared` になる。
+- 匿名の caller は受け付けない。request id は 1〜64 文字の印字可能 ASCII (空白なし)。
+- 上限: 質問 4,000 バイト、回答 16,000 バイト、同時 20 件、モデル呼び出し 1 分に 60 回。
+
+### アダプタ
+
+1. `IC_IDENTITY_SEED` から identity を 8 個作る。slot 0 は従来と同じ `sha256(seed)`、slot n は
+   `sha256(seed + "\n" + n)`。数を固定するのは、canister に残す会話を増やし続けないため
+   (リクエストごとに新しい identity を作ると、clear に失敗した会話が誰にも消せずに残る)。
+2. 1 リクエストは空いている slot を 1 つ、使い終わるまで占有する (プロセス内)。空きがなければ待つ。
+   空きの中からはランダムに選び、別のインスタンスと重なりにくくする。
+3. `clear_conversation()` の返す revision を `base_revision` にして `send_message(UUID, revision, q)` を呼ぶ。
+4. `Ok` → `{ answer: reply }`。`Err` → throw (route が 502・未課金)。エラーの本文は載せず、種類の名前だけを使う。
+5. `IC_IDENTITY_SEED` が未設定なら canister を呼ばずに throw する。
+
+### 以前の「受け入れた制限」がどう変わったか
+
+§6 は「並行リクエストの clear / chat の交錯で文脈が混ざりうる (許容)」としていた。0.7.0 では
+revision のおかげで、同じ identity を 2 つのリクエストが同時に使っても混ざらない: 後から clear した側だけが
+その revision で送れ、先の側は `Cleared` か `Conflict` か `Busy` で失敗する (未課金)。プロセス内では
+slot の占有でそもそも重ならない。残る制限は「インスタンスをまたいで同じ slot が重なると片方が 502 になる」
+ことと、「質問と回答がその slot の次の利用まで canister に残る」こと。
+
+### テスト (`test/coo-icp.test.ts`)
+
+呼び出しの順番を見るだけのモックをやめ、0.7.0 の動き (caller ごとの会話・revision・Busy・Conflict・
+Cleared・request id の形式) を模したモデルに対して確認する。Candid は本物の IDL を使い、引数と返り値が
+canister の型で往復することを確かめる。確認する内容: 前の買い手の質問が次の回答に入らない /
+同時 3 件が別々の会話になる / 9 件目以降は待つ (同時に動くのは 8 件まで) / 失敗しても slot を返す /
+別のインスタンスが同じ identity を使ったら混ざらずに失敗する / identity は seed だけで決まり、
+slot 0 は `sha256(seed)` / env が欠けていれば canister を呼ばない / エラーに遠隔の本文を載せない。
+
+### 実機確認 (2026-11-15・mainnet・使い捨ての seed)
+
+- 旧 `chat` は拒否される (本番が売れなくなっていた原因の再現)。
+- 新アダプタで 1 件: 約 7.5 秒で回答。同時 2 件: 両方成功 (約 7.1 秒)。
+- 同じ identity で 2 件続けて送り、2 件目が 1 件目の合言葉を知らないこと (文脈が混ざらない) を確認。
+- 確認に使った会話は clear 済み (残ったメッセージ 0 件)。

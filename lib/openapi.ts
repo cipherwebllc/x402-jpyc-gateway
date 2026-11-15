@@ -71,7 +71,7 @@ function cachedListing(config: SellerConfig): Promise<ListingText | null> {
 // 選んだアダプタが動く設定のときだけ、その応答の schema を返す。
 function outputSchema(): Record<string, unknown> | null {
   const adapter = process.env.ADAPTER || 'coo-icp';
-  if (adapter === 'coo-icp' && process.env.COO_CANISTER_ID) {
+  if (adapter === 'coo-icp' && process.env.COO_CANISTER_ID && process.env.IC_IDENTITY_SEED) {
     return {
       type: 'object',
       properties: { answer: { type: 'string' } },

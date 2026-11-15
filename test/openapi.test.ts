@@ -66,6 +66,7 @@ describe('GET /openapi.json', () => {
     vi.stubEnv('EXPECTED_USDC_RECIPIENT', usdcMerchant);
     vi.stubEnv('ADAPTER', 'coo-icp');
     vi.stubEnv('COO_CANISTER_ID', 'canister-id');
+    vi.stubEnv('IC_IDENTITY_SEED', 'secret-seed');
     vi.stubEnv('UPSTREAM_URL', '');
     vi.spyOn(console, 'error').mockImplementation(() => {});
     fetchMock = fetchFor();
@@ -239,6 +240,7 @@ describe('GET /openapi.json', () => {
   it.each([
     ['the adapter is unknown', { ADAPTER: 'other' }],
     ['coo-icp has no canister', { COO_CANISTER_ID: '' }],
+    ['coo-icp has no identity seed', { IC_IDENTITY_SEED: '' }],
     ['http has no upstream', { ADAPTER: 'http', UPSTREAM_URL: '' }],
   ] as [string, Record<string, string>][])('returns 404 without fetching when %s', async (_name, env) => {
     for (const [name, value] of Object.entries(env)) vi.stubEnv(name, value);
