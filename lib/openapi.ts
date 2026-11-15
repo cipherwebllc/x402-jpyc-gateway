@@ -1,5 +1,7 @@
 // x402scan 用の OpenAPI 文書。支払いの経路に影響させないため、lib/listing.ts と lib/usdcFace.ts の
 // キャッシュと取得の順序には触らず、検証だけを共有して OpenPay を別に読む。
+import { selectedAdapterSchema } from './adapters';
+import { OPENPAY_ORIGIN } from './openpay';
 import {
   arcFaceProblem,
   sellerConfig,
@@ -8,7 +10,6 @@ import {
 } from './sellerPins';
 import type { CatalogItem, SellerConfig } from './types';
 
-const OPENPAY = 'https://open-pay.jp';
 // OpenPay の取得上限は IP ごとで /api/consult と共有する。失敗も含めて読む回数を抑える。
 const LISTING_TTL_MS = 30 * 60_000;
 const RETRY_AFTER_MS = 60_000;
@@ -35,8 +36,8 @@ async function readJson(url: string): Promise<unknown> {
 async function readListing(config: SellerConfig): Promise<ListingText | null> {
   const id = encodeURIComponent(config.resourceId);
   const [face, listing] = await Promise.all([
-    readJson(`${OPENPAY}/api/x402/relay/requirements?resourceId=${id}`),
-    readJson(`${OPENPAY}/api/discovery/${id}`),
+    readJson(`${OPENPAY_ORIGIN}/api/x402/relay/requirements?resourceId=${id}`),
+    readJson(`${OPENPAY_ORIGIN}/api/discovery/${id}`),
   ]);
   // /api/consult が 500 になる条件は、ここでも出さない。
   validateUsdcFace(face, config);
@@ -67,27 +68,11 @@ function cachedListing(config: SellerConfig): Promise<ListingText | null> {
   return read.listing;
 }
 
-// 選んだアダプタが動く設定のときだけ、その応答の schema を返す。
-function outputSchema(): Record<string, unknown> | null {
-  const adapter = process.env.ADAPTER || 'coo-icp';
-  if (adapter === 'coo-icp' && process.env.COO_CANISTER_ID && process.env.IC_IDENTITY_SEED) {
-    return {
-      type: 'object',
-      properties: { answer: { type: 'string' } },
-      required: ['answer'],
-    };
-  }
-  // http アダプタは上流の JSON をそのまま返すので、形を決められない。
-  if (adapter === 'http' && process.env.UPSTREAM_URL) {
-    return { description: 'JSON returned by the upstream API, relayed as is' };
-  }
-  return null;
-}
-
 /** The document, or null when USDC is off or the config or listing cannot be confirmed. */
 export async function openApiDocument(): Promise<Record<string, unknown> | null> {
   const config = sellerConfig();
-  const schema = outputSchema();
+  // 選んだアダプタが動く設定でなければ null (文書を出さない)。
+  const schema = selectedAdapterSchema();
   if (!config.expectedUsdcRecipient || !schema) return null;
   const listing = await cachedListing(config);
   if (!listing) return null;
