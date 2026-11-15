@@ -1,33 +1,11 @@
-import { selectedAdapter } from '@/lib/adapters';
-import { json402 } from '@/lib/http';
+import { jsonResponse } from '@/lib/http';
 import { acceptsFor } from '@/lib/listing';
-import { encodePaymentResponse, settlePayment, verifyPayment } from '@/lib/openpay';
-import { decodePaymentHeader } from '@/lib/paymentHeader';
-import { relayPayment } from '@/lib/relay';
-import { ARC_NETWORKS } from '@/lib/sellerPins';
-import type { PaymentRequirements, SettleResult, UsdcFace, VerifyResult } from '@/lib/types';
-import { isArcPayment, paymentRequiredHeaderFor, usdcFace } from '@/lib/usdcFace';
+import { choosePayment, paymentRequired, runPurchase } from '@/lib/purchase';
+import type { PaymentRequirements, UsdcFace } from '@/lib/types';
+import { usdcFace } from '@/lib/usdcFace';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-
-function jsonError(status: number, error: string): Response {
-  return new Response(JSON.stringify({ error }), {
-    status,
-    headers: {
-      'content-type': 'application/json',
-      'cache-control': 'no-store',
-    },
-  });
-}
-
-function paymentError(
-  accepts: PaymentRequirements[],
-  error: string,
-  paymentRequiredHeader?: string,
-): Response {
-  return json402(accepts, error, paymentRequiredHeader);
-}
 
 export async function GET(request: Request): Promise<Response> {
   const paymentHeader = request.headers.get('X-PAYMENT');
@@ -41,150 +19,19 @@ export async function GET(request: Request): Promise<Response> {
     accepts = await acceptsFor(request.url, { forPayment: hasPayment });
     usdc = await usdcFace({ forPayment: hasPayment });
   } catch {
-    return jsonError(500, 'accepts_unavailable');
+    return jsonResponse(500, { error: 'accepts_unavailable' });
   }
 
-  const allAccepts = usdc ? [...accepts, usdc.v1Accepts] : accepts;
   if (!hasPayment) {
-    return paymentError(allAccepts, 'payment_required', paymentRequiredHeaderFor(usdc));
+    return paymentRequired(accepts, usdc, 'payment_required');
   }
 
   const q = new URL(request.url).searchParams.get('q');
   if (!q) {
-    return jsonError(400, 'q_required');
-  }
-  if (!usdc && paymentSignatureHeader !== null) {
-    return paymentError(accepts, 'payment_invalid');
+    return jsonResponse(400, { error: 'q_required' });
   }
 
-  let paymentPayload: unknown;
-  let isUsdcRail = usdc !== null && paymentSignatureHeader !== null;
-  const isArcRail = isUsdcRail && isArcPayment(usdc!, paymentSignatureHeader!);
-  if (!isUsdcRail) {
-    paymentPayload = decodePaymentHeader(paymentHeader ?? '');
-    if (paymentPayload === undefined) {
-      return paymentError(allAccepts, 'invalid_payment_payload', paymentRequiredHeaderFor(usdc));
-    }
-    const network = typeof paymentPayload === 'object' && paymentPayload !== null
-      ? (paymentPayload as { network?: unknown }).network : undefined;
-    if (!usdc && typeof network === 'string' &&
-        ['base', 'base-sepolia', 'eip155:8453', 'eip155:84532'].includes(network)) {
-      return paymentError(accepts, 'payment_invalid');
-    }
-    // Arc is v2 only: a v1 X-PAYMENT naming an Arc network can never be settled.
-    if (typeof network === 'string' && ARC_NETWORKS.includes(network)) {
-      return paymentError(allAccepts, 'payment_invalid', paymentRequiredHeaderFor(usdc));
-    }
-    isUsdcRail =
-      usdc !== null &&
-      typeof paymentPayload === 'object' &&
-      paymentPayload !== null &&
-      (paymentPayload as { network?: unknown }).network === usdc.v1Accepts.network;
-  }
-
-  if (isUsdcRail && usdc) {
-    const relayHeaders =
-      paymentSignatureHeader !== null
-        ? { paymentSignatureHeader }
-        : { paymentHeader: paymentHeader! };
-
-    let verification: VerifyResult | Response;
-    try {
-      verification = await relayPayment('verify', relayHeaders, usdc, accepts, isArcRail ? 'arc' : 'base');
-    } catch {
-      return jsonError(500, 'payment_verification_failed');
-    }
-    if (verification instanceof Response) return verification;
-    if (verification?.isValid !== true) {
-      return paymentError(
-        allAccepts,
-        verification?.invalidReason ?? 'payment_invalid',
-        paymentRequiredHeaderFor(usdc),
-      );
-    }
-
-    let serializedBody: string;
-    try {
-      const result = await selectedAdapter()({ q });
-      const serialized = JSON.stringify(result);
-      if (serialized === undefined) throw new Error('adapter result is not JSON serializable');
-      serializedBody = serialized;
-    } catch {
-      return jsonError(502, 'upstream_error');
-    }
-
-    let settlement: SettleResult | Response;
-    try {
-      settlement = await relayPayment('settle', relayHeaders, usdc, accepts, isArcRail ? 'arc' : 'base');
-    } catch {
-      return jsonError(500, 'payment_settlement_failed');
-    }
-    if (settlement instanceof Response) return settlement;
-    if (settlement?.success !== true) {
-      return paymentError(
-        allAccepts,
-        settlement?.errorReason ?? 'settlement_failed',
-        paymentRequiredHeaderFor(usdc),
-      );
-    }
-
-    const paymentResponse = encodePaymentResponse(settlement);
-    return new Response(serializedBody, {
-      status: 200,
-      headers: {
-        'content-type': 'application/json',
-        'cache-control': 'no-store',
-        'X-PAYMENT-RESPONSE': paymentResponse,
-        // Arc buyers pay with x402 v2 clients, which read PAYMENT-RESPONSE.
-        ...(isArcRail ? { 'PAYMENT-RESPONSE': paymentResponse } : {}),
-      },
-    });
-  }
-
-  let verification;
-  try {
-    verification = await verifyPayment(paymentPayload, accepts[0]);
-  } catch {
-    return jsonError(500, 'payment_verification_failed');
-  }
-  if (verification.isValid !== true) {
-    return paymentError(
-      allAccepts,
-      verification.invalidReason ?? 'invalid_payment',
-      paymentRequiredHeaderFor(usdc),
-    );
-  }
-
-  let serializedBody: string;
-  try {
-    const result = await selectedAdapter()({ q });
-    const serialized = JSON.stringify(result);
-    if (serialized === undefined) throw new Error('adapter result is not JSON serializable');
-    serializedBody = serialized;
-  } catch {
-    return jsonError(502, 'upstream_error');
-  }
-
-  let settlement;
-  try {
-    settlement = await settlePayment(paymentPayload, accepts[0]);
-  } catch {
-    return jsonError(500, 'payment_settlement_failed');
-  }
-  if (settlement.success !== true) {
-    return paymentError(
-      allAccepts,
-      settlement.errorReason ?? 'settlement_failed',
-      paymentRequiredHeaderFor(usdc),
-    );
-  }
-
-  return new Response(serializedBody, {
-    status: 200,
-    headers: {
-      'content-type': 'application/json',
-      'cache-control': 'no-store',
-      'X-PAYMENT-RESPONSE': encodePaymentResponse(settlement),
-    },
-  });
+  const choice = choosePayment({ paymentHeader, paymentSignatureHeader }, accepts, usdc);
+  if (choice.kind === 'reply') return choice.response;
+  return runPurchase(choice, q, accepts, usdc);
 }
