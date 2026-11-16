@@ -175,10 +175,10 @@ ALLOWED_HOSTS=open-pay.jp,your-gateway.example
 | `402 requirements_mismatch` | USDC の決済条件が変わった。新しい条件を返します | なし |
 | `405` | 支払いのヘッダーをつけた `HEAD`。何も動かしません (支払いなしの `HEAD` には 402 のヘッダーだけを返します) | なし |
 | `500 accepts_unavailable` | 出品を確認できない (未掲載・非公開・不一致・OpenPay の一時停止) | なし |
-| `500 payment_verification_failed` / `payment_settlement_failed` | 検証済みの決済条件が受取先の設定と合わなくなった。OpenPay には何も送りません | なし |
+| `500 payment_verification_failed` / `payment_settlement_failed` | 検証済みの決済条件が受取先の設定と合わなくなった (OpenPay には何も送りません)。または、USDC の relay が決済条件の不一致 (409) で断ったあと、新しい決済条件を取得・確認できなかった (relay が断っているので決済されていません) | なし |
 | `502 upstream_error` | 上流が失敗した。決済しません | なし |
 | `503 payment_service_unavailable` | OpenPay が検証の結果を返せなかった (応答なし・429・5xx)。上流も決済も動かしません。支払いの有効期限内なら、時間をおいて同じ支払いで再試行できます | なし |
-| `502 settlement_pending` | 決済が進行中 (OpenPay が 202 を返した)。**回答は返しません。** 決済される見込みなので、払い直さないでください。`X-PAYMENT-RESPONSE` に OpenPay の応答 (取引ハッシュを含む) が入ります | 請求されうる |
+| `502 settlement_pending` | 決済が進行中 (OpenPay が 202 を返した)。**回答は返しません。** 決済される見込みなので、払い直さないでください。OpenPay の応答の本文が JSON のオブジェクトとして読めたときだけ、それを `X-PAYMENT-RESPONSE` (`PAYMENT-SIGNATURE` で払ったときは `PAYMENT-RESPONSE` も) に入れます。取引ハッシュは OpenPay が入れたときだけあり、空 (`null`) のこともあります | 請求されうる |
 | `500 settlement_unknown` | 決済の結果が分からない (OpenPay の応答なし・5xx)。**回答は返しません。** | 分からない |
 
 最後の 2 つは、買い手が請求されたのに回答を受け取れないことがあります。ゲートウェイは回答を保存しないので、渡し直せません (共有ストアが必要で、未対応です)。この 2 つはサーバーログに `settle pending` / `settle outcome unknown` として残るので、OpenPay の管理画面の売上と突き合わせて、買い手に個別に対応してください。

@@ -1036,6 +1036,12 @@ OpenPay への POST はすべて `postToOpenPay` を通る。例外は投げず�
 (通信の失敗・時間切れ) `status` は null。`body` は JSON のオブジェクトだけで、それ以外 (JSON でない・`null`・
 配列・文字列・本文の読み取り中の時間切れ) は null。
 
+リダイレクトはたどらない (`redirect: 'manual'`)。fetch の既定のままだと、OpenPay が 3xx を返したときに支払いを
+`Location` の先へもう一度 POST し、その先の答えを OpenPay の判定として信じてしまう (verify の先が 200
+`isValid: true` なら上流が動き、settle の先が 400 なら払い直しを促す 402 になる)。3xx は下の表の「その他の状態」に
+入る (verify は 503、settle は 500 `settlement_unknown`)。出品 (discovery) と USDC の決済条件
+(relay/requirements) の GET は変えていない。中身を出品者の pin と照合するため。
+
 verify (`verifyOutcome`):
 
 | OpenPay の応答 | 判定 | 買い手への応答 |
@@ -1043,7 +1049,7 @@ verify (`verifyOutcome`):
 | 200 で `isValid === true` | valid | 上流へ進む |
 | 200 でそれ以外のオブジェクト | rejected | 402 (理由は `invalidReason`) |
 | 4xx (429 を除く) | rejected | 402 (理由は `invalidReason`、なければ `error`) |
-| 200 で本文が読めない・429・5xx・その他の状態・応答なし | unavailable | 503 `payment_service_unavailable` |
+| 200 で本文が読めない・429・5xx・その他の状態 (3xx を含む)・応答なし | unavailable | 503 `payment_service_unavailable` |
 
 settle (`settleOutcome`):
 
@@ -1052,21 +1058,27 @@ settle (`settleOutcome`):
 | 200 で `success === true` | settled | 200 と回答、領収ヘッダー |
 | 200 で `success === false` | rejected | 402 (理由は `errorReason`) |
 | 4xx | rejected | 402 (理由は `errorReason`、なければ `error`) |
-| 202 | pending | 502 `settlement_pending`、本文があれば領収ヘッダー |
-| 200 でそれ以外・5xx・その他の状態・応答なし | unknown | 500 `settlement_unknown` |
+| 202 | pending | 502 `settlement_pending`、本文が JSON のオブジェクトなら領収ヘッダー |
+| 200 でそれ以外・5xx・その他の状態 (3xx を含む)・応答なし | unknown | 500 `settlement_unknown` |
 
 - 「請求していない」と言えるのは、OpenPay がはっきり断ったとき (4xx、または 200 で `success: false`) だけ。
   それ以外で 402 を返さない。200 の `{}` や `success: "true"` は「分からない」に入れる。
-- 5xx は中身を見ない。OpenPay の 503 には「確実に請求していない」もの (`kv_required` など) もあるが、
+- 5xx は中身を見ない。OpenPay の 5xx には「確実に請求していない」もの (503 の `kv_required` や
+  `daily_budget_exceeded`、502 の `relay_error` = 送信していないことが確実な失敗) もあるが、
   見分けるには理由の一覧をこちらに持つ必要があり、OpenPay 側で理由が増えたときに「請求していない」と
   誤って言う危険のほうが大きい (計画レビューの裁定 R3)。
 - 202 は facilitator が「送信済みだが未確定」のとき、または同じ支払いの settle が先に進んでいるときに返す。
-  どちらも決済される見込みがあるので、払い直しを求めない。settle の本文 (取引ハッシュを含む) を
-  `X-PAYMENT-RESPONSE` (v2 では `PAYMENT-RESPONSE` も) に入れて返し、買い手が照合できるようにする。
+  どちらも決済される見込みがあるので、払い直しを求めない。settle の本文が JSON のオブジェクトとして読めたときは、
+  それを `X-PAYMENT-RESPONSE` (v2 では `PAYMENT-RESPONSE` も) に入れて返し、買い手が照合できるようにする。
+  本文が読めなければ領収ヘッダーは付けない。取引ハッシュ (`transaction`) は OpenPay が入れたときだけあり、
+  `null` のこともある。
   **このとき買い手は請求されうるが、回答は受け取れない。** 回答を取っておいて渡し直すには共有ストアが要る
   (§19 の計画の N1。未対応)。
 - relay の 409 は今までどおり (USDC 面を取り直して 402 `requirements_mismatch`)。OpenPay の relay が 409 を
   返すのは、決済条件の不一致と rail の不一致の 2 つだけ (origin/main の lib/x402/dualRailRelay.ts で確認)。
+  取り直しに失敗したとき (取れない・pin が合わない) は、今までどおり 500 `payment_verification_failed` /
+  `payment_settlement_failed`。relay が断っているので請求はない。この 2 つの 500 は、pin が合わず OpenPay に
+  何も送らなかったときにも返る。
 - 理由の値は `^[a-z0-9_]{1,64}$` に合う文字列だけを買い手に返す。合わなければ固定の文字列
   (verify: JPYC は `invalid_payment`、USDC は `payment_invalid`。settle: `settlement_failed`) にする。
   verify の固定の文字列が rail で違うのは、OpenPay の 2 つのリファレンスゲートに合わせたまま残した。
@@ -1099,7 +1111,8 @@ settle (`settleOutcome`):
 
 - `PAYMENT-SIGNATURE` で払った買い手 (x402 v2) には、Base でも Arc でも `X-PAYMENT-RESPONSE` と同じ値の
   `PAYMENT-RESPONSE` を付ける。`X-PAYMENT` で払った買い手 (v1) には `X-PAYMENT-RESPONSE` だけ。
-- 502 `settlement_pending` にも同じ規則で付ける。
+- 502 `settlement_pending` にも同じ規則で付ける。ただし OpenPay の 202 の本文が JSON のオブジェクトとして
+  読めたときだけ (読めなければ付けない)。
 
 ### 失敗の記録
 
@@ -1112,9 +1125,10 @@ HTTP の状態だけ。q・回答・支払いのヘッダー・ウォレット�
 | `upstream failed, not charged (jpyc)` | 上流が失敗した (settle していない) |
 | `settle pending, content not delivered (jpyc, HTTP 202)` | settle が 202 |
 | `settle outcome unknown, content not delivered (base, no response)` | settle の結果が分からない |
-| `payment terms unavailable (unexpected error)` など | sellerPins が理由を記録していない例外 |
+| `payment terms unavailable (unexpected error)` | 決済条件を読むところで、sellerPins が理由を記録していない例外 |
+| `verify not sent or refused by OpenPay (unexpected error)` / `settle …` | verify / settle の前後で、sellerPins が理由を記録していない例外。OpenPay に送る前か、relay が 409 で断ったあとの取り直しで起きる (どちらも請求なし) |
 
-最後の 2 種類 (pending / unknown) は、買い手が請求されたのに回答を受け取っていない可能性がある。運用者が
+settle の 2 種類 (pending / unknown) は、買い手が請求されたのに回答を受け取っていない可能性がある。運用者が
 OpenPay の管理画面と突き合わせるきっかけになる。
 
 ### golden テストの変更
@@ -1142,6 +1156,26 @@ OpenPay の管理画面と突き合わせるきっかけになる。
 この順番は変わる。順番は外への約束ではないので、「2 件ともそれぞれ verify → 上流 → settle を 1 回ずつ通って
 200 になる」ことだけを確かめるテストに置き換えた。golden の「8. cache tiers」「9. interleaved fetches」
 (テストが fetch を止めて順番を決める場面) は、`hasSignal` と `PAYMENT-RESPONSE` のほかは変わっていない。
+
+### コードレビュー (Codex) の対応
+
+1. **リダイレクトをたどっていた (P2)。** verify / settle の POST に `redirect: 'manual'` を付けた (上の
+   「OpenPay の応答の読み方」)。test/openpay.test.ts に、POST がすべて `redirect: 'manual'` で GET の読み取りは
+   既定のままであること、verify / settle の 302 / 307 / 308 (本文なし・成功の形の本文) が JPYC と Base v2 の
+   両方で 503 / 500 `settlement_unknown` になり、`Location` の先へ行かないことを足した。テストの fetch は
+   `redirect: 'manual'` でなければ fetch の既定のように `Location` の先の答えを返すので、付け忘れるとこの
+   テストも落ちる。golden は 384 場面のうち、139 場面は変更なし、245 場面は fetch の記録の POST (390 件) に
+   `"otherInit": { "redirect": "manual" }` が増えただけで、それ以外の変更・場面の増減はない。
+2. **同時に動く 2 件のテストが、各自の settle を確かめていなかった (P3)。** fetch の記録が
+   `fetch relay settle` のように誰の支払いかを書いていなかったので、Arc の settle が 2 回で Base の settle が
+   なくても通った。POST の本文の支払いから誰の verify / settle かを記録し、settle をテストが 1 件ずつ放すよう
+   にした (test/purchase.test.ts)。
+3. **500 `payment_verification_failed` / `payment_settlement_failed` を「OpenPay に何も送っていない」とだけ
+   書いていた (P3)。** relay の 409 のあとの取り直しの失敗でも返る (上の 409 の項)。README・lib/purchase.ts の
+   注記と、記録の言葉 (`verify not sent` → `verify not sent or refused by OpenPay`、settle も同じ) を直した。
+4. **502 `settlement_pending` に必ず取引ハッシュつきの領収ヘッダーが付くように書いていた (P3)。** 付くのは
+   202 の本文が JSON のオブジェクトのときだけで、ハッシュは OpenPay が入れたときだけ。README と上の 202 の項を
+   直した。
 
 ### やっていないこと (次のフェーズ)
 

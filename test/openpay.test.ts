@@ -41,11 +41,30 @@ const url = (q = 'hello') => `${resource}?q=${q}`;
 /** How one endpoint misbehaves: it never answers, or it answers and then the body never arrives. */
 type Stall = 'no response' | 'no body';
 
+/** A redirect answered by an OpenPay endpoint: the status, and the JSON body sent with it (none if undefined). */
+type Redirect = { status: number; body: unknown };
+const ELSEWHERE = 'https://elsewhere.example/answer';
+// リダイレクトの先が返す答え。たどってしまうと、verify は通り (上流が動く)、settle は「断られた」の 402 になる。
+const ELSEWHERE_ANSWER: Partial<Record<Endpoint, [unknown, number]>> = {
+  'facilitator verify': [{ isValid: true }, 200],
+  'relay verify': [{ isValid: true }, 200],
+  'facilitator settle': [{ success: false, errorReason: 'invalid_signature' }, 400],
+  'relay settle': [{ success: false, errorReason: 'invalid_signature' }, 400],
+};
+
 describe('OpenPay calls', () => {
   // AbortSignal.timeout を差し替えて、渡された待ち時間を記録し、テストから時間切れを起こせるようにする。
   let timeouts: Array<{ ms: number; controller: AbortController }>;
-  let calls: Array<{ endpoint: Endpoint; signal: AbortSignal | null | undefined }>;
+  let calls: Array<{
+    endpoint: Endpoint;
+    method: string | undefined;
+    redirect: RequestRedirect | undefined;
+    signal: AbortSignal | null | undefined;
+  }>;
   let stalled: Partial<Record<Endpoint, Stall>>;
+  let redirecting: Partial<Record<Endpoint, Redirect>>;
+  // リダイレクトの先へ行った endpoint。
+  let followed: Endpoint[];
   let adapter: ReturnType<typeof vi.fn>;
 
   const abortError = () => new DOMException('The operation was aborted due to timeout', 'TimeoutError');
@@ -74,6 +93,8 @@ describe('OpenPay calls', () => {
     timeouts = [];
     calls = [];
     stalled = {};
+    redirecting = {};
+    followed = [];
     vi.spyOn(AbortSignal, 'timeout').mockImplementation((ms: number) => {
       const controller = new AbortController();
       timeouts.push({ ms, controller });
@@ -83,11 +104,27 @@ describe('OpenPay calls', () => {
       const endpoint = ENDPOINT_BY_URL[String(input)];
       if (!endpoint) throw new Error(`unexpected fetch ${String(input)}`);
       const signal = init?.signal;
-      calls.push({ endpoint, signal });
+      calls.push({ endpoint, method: init?.method, redirect: init?.redirect, signal });
       const stall = stalled[endpoint];
       if (stall === 'no response') return untilAborted(signal!);
       if (stall === 'no body') {
         return { status: 200, ok: true, json: () => untilAborted(signal!) } as unknown as Response;
+      }
+      const redirect = redirecting[endpoint];
+      if (redirect) {
+        // fetch の既定 (redirect: 'follow') をまねる。'manual' でなければ Location の先へ行き、その答えを返す。
+        if (init?.redirect !== 'manual') {
+          followed.push(endpoint);
+          const [body, status] = ELSEWHERE_ANSWER[endpoint]!;
+          return response(body, status);
+        }
+        return new Response(redirect.body === undefined ? null : JSON.stringify(redirect.body), {
+          status: redirect.status,
+          headers: {
+            location: ELSEWHERE,
+            ...(redirect.body === undefined ? {} : { 'content-type': 'application/json' }),
+          },
+        });
       }
       return response(BODIES[endpoint]);
     }));
@@ -176,6 +213,63 @@ describe('OpenPay calls', () => {
     expect(calls.filter((call) => call.endpoint === endpoint)).toHaveLength(1);
   });
 
+  it('posts to OpenPay without following redirects; the GET reads keep the default', async () => {
+    expect((await GET(new Request(url(), { headers: JPYC }))).status).toBe(200);
+    resetAcceptsCache();
+    resetUsdcFaceCache();
+    expect((await GET(new Request(url(), { headers: BASE_V2 }))).status).toBe(200);
+
+    const isPost = (endpoint: Endpoint) => endpoint.endsWith(' verify') || endpoint.endsWith(' settle');
+    const posts = calls.filter((call) => isPost(call.endpoint));
+    const reads = calls.filter((call) => !isPost(call.endpoint));
+    expect(posts.map((call) => call.endpoint))
+      .toEqual(['facilitator verify', 'facilitator settle', 'relay verify', 'relay settle']);
+    for (const call of posts) expect([call.method, call.redirect]).toEqual(['POST', 'manual']);
+    expect(reads.map((call) => call.endpoint)).toEqual(['discovery', 'requirements', 'discovery', 'requirements']);
+    for (const call of reads) expect([call.method, call.redirect]).toEqual([undefined, undefined]);
+  });
+
+  const RAILS = { jpyc: JPYC, base: BASE_V2 } as const;
+  const REDIRECT_STATUSES = [302, 307, 308];
+  const redirectCases = (endpoints: Array<[Endpoint, keyof typeof RAILS]>, claim: unknown) =>
+    endpoints.flatMap(([endpoint, rail]) => REDIRECT_STATUSES.flatMap((status) =>
+      [undefined, claim].map((body): [Endpoint, keyof typeof RAILS, number, unknown] => [endpoint, rail, status, body])));
+
+  it.each(redirectCases([['facilitator verify', 'jpyc'], ['relay verify', 'base']], { isValid: true }))(
+    '%s (%s) answering %i with body %j: 503, upstream and settle do not run',
+    async (endpoint, rail, status, body) => {
+      redirecting[endpoint] = { status, body };
+      const res = await GET(new Request(url(), { headers: RAILS[rail] }));
+      expect(res.status).toBe(503);
+      expect(res.headers.get('PAYMENT-REQUIRED')).toBeNull();
+      expect(await res.json()).toEqual({ error: 'payment_service_unavailable' });
+      expect(adapter).not.toHaveBeenCalled();
+      expect(calls.filter((call) => call.endpoint === endpoint)).toHaveLength(1);
+      expect(calls.some((call) => call.endpoint.endsWith(' settle'))).toBe(false);
+      expect(followed).toEqual([]);
+      expect(vi.mocked(console.error).mock.calls)
+        .toEqual([[`[openpay-x402] verify unavailable (${rail}, HTTP ${status})`]]);
+    },
+  );
+
+  it.each(redirectCases([['facilitator settle', 'jpyc'], ['relay settle', 'base']], { success: true, transaction: '0xabc' }))(
+    '%s (%s) answering %i with body %j: 500 settlement_unknown, no receipt and no 402',
+    async (endpoint, rail, status, body) => {
+      redirecting[endpoint] = { status, body };
+      const res = await GET(new Request(url(), { headers: RAILS[rail] }));
+      expect(res.status).toBe(500);
+      expect(res.headers.get('PAYMENT-REQUIRED')).toBeNull();
+      expect(res.headers.get('X-PAYMENT-RESPONSE')).toBeNull();
+      expect(res.headers.get('PAYMENT-RESPONSE')).toBeNull();
+      expect(await res.json()).toEqual({ error: 'settlement_unknown' });
+      expect(adapter).toHaveBeenCalledTimes(1);
+      expect(calls.filter((call) => call.endpoint === endpoint)).toHaveLength(1);
+      expect(followed).toEqual([]);
+      expect(vi.mocked(console.error).mock.calls)
+        .toEqual([[`[openpay-x402] settle outcome unknown, content not delivered (${rail}, HTTP ${status})`]]);
+    },
+  );
+
   it('writes only fixed words, the rail and the HTTP status to the log', async () => {
     const secretQ = 'SECRET-QUESTION';
     const secretRemote = 'SECRET-REMOTE-TEXT';
@@ -237,6 +331,35 @@ describe('OpenPay calls', () => {
     const res = await GET(new Request(url(), { headers: JPYC }));
     expect(res.status).toBe(500);
     expect(vi.mocked(console.error).mock.calls).toEqual([['[openpay-x402] JPYC recipient mismatch']]);
+  });
+
+  it.each<[Endpoint, string, string]>([
+    ['relay verify', 'payment_verification_failed', 'verify'],
+    ['relay settle', 'payment_settlement_failed', 'settle'],
+  ])('%s refused with 409 and the refreshed terms fail unexpectedly: 500 %s, one fixed log line', async (endpoint, error, step) => {
+    const normal = vi.mocked(fetch).getMockImplementation()!;
+    let refused = false;
+    vi.mocked(fetch).mockImplementation(async (input, init) => {
+      const hit = ENDPOINT_BY_URL[String(input)];
+      if (hit === endpoint) {
+        refused = true;
+        return response({ error: 'requirements_mismatch' }, 409);
+      }
+      if (hit === 'requirements' && refused) {
+        // 取り直した決済条件を確かめるところで、sellerPins が記録しない例外が起きる。
+        const terms = { get resourceId(): never { throw new Error('SECRET-REMOTE-TEXT'); } };
+        return { status: 200, ok: true, json: async () => terms } as unknown as Response;
+      }
+      return normal(input, init);
+    });
+
+    const res = await GET(new Request(url('SECRET-QUESTION'), { headers: BASE_V2 }));
+
+    expect(res.status).toBe(500);
+    expect(res.headers.get('PAYMENT-REQUIRED')).toBeNull();
+    expect(await res.json()).toEqual({ error });
+    expect(vi.mocked(console.error).mock.calls)
+      .toEqual([[`[openpay-x402] ${step} not sent or refused by OpenPay (unexpected error)`]]);
   });
 
   it('HEAD with a payment header calls nothing and is refused; HEAD without one gets the 402 headers', async () => {

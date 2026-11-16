@@ -136,9 +136,11 @@ describe('choosePayment', () => {
   });
 });
 
-// 同じモジュールで同時に動く 2 件の支払い。どちらも自分の verify → 上流 → settle を 1 回ずつ通って 200 になる。
-// 2 件のあいだの細かい順番 (どちらの fetch が先か) は約束しない。フェーズ B ではリファクタの前後で順番が
-// 変わらないことまで確かめたが、C1 で OpenPay の応答の読み方を変えたので、ここでは件数と各自の順番だけを見る。
+// 同じモジュールで同時に動く 2 件の支払い。どちらも「自分の」支払いの verify → 上流 → settle を 1 回ずつ通って
+// 200 になる。fetch の記録は、POST の本文の支払い (facilitator は paymentPayload、relay は paymentHeader か
+// paymentSignatureHeader) から誰の支払いかを決めて `verify <名前>` / `settle <名前>` と書く。settle はテストが
+// 1 件ずつ放すまで止めておき、2 件とも止まっている間はどちらも終わらないこと、先の 1 件だけを放すとその 1 件
+// だけが終わることを確かめる (相手の settle で終わっていない)。2 件のあいだの verify と上流の順番は約束しない。
 describe('two concurrent paid requests on one module', () => {
   const ROUTES: Record<string, string> = {
     [`${OPENPAY}/api/discovery/${resourceId}`]: 'discovery',
@@ -163,6 +165,19 @@ describe('two concurrent paid requests on one module', () => {
     arc: { 'PAYMENT-SIGNATURE': SIG_ARC },
   };
   let events: string[] = [];
+  // settle ごとの放す関数 (支払いの名前で引く)。
+  let heldSettles: Map<string, () => void>;
+
+  /** The name in PAID of the payment carried by an OpenPay POST body. */
+  function payerOf(body: string): string {
+    const sent = JSON.parse(body) as { paymentPayload?: unknown; paymentHeader?: string; paymentSignatureHeader?: string };
+    const header = sent.paymentPayload !== undefined
+      ? b64(sent.paymentPayload)
+      : sent.paymentHeader ?? sent.paymentSignatureHeader;
+    const names = Object.keys(PAID).filter((name) => Object.values(PAID[name])[0] === header);
+    if (names.length !== 1) throw new Error('POST body does not carry exactly one known payment');
+    return names[0];
+  }
 
   beforeEach(async () => {
     vi.resetModules();
@@ -170,9 +185,21 @@ describe('two concurrent paid requests on one module', () => {
     vi.stubEnv('MY_RESOURCE_ID', resourceId);
     vi.stubEnv('EXPECTED_RECIPIENT', merchant);
     vi.stubEnv('EXPECTED_USDC_RECIPIENT', usdcMerchant);
-    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+    heldSettles = new Map();
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const route = ROUTES[String(input)];
-      events.push(`fetch ${route}`);
+      if (!route) throw new Error(`unexpected fetch ${String(input)}`);
+      if (init?.method !== 'POST') {
+        events.push(`read ${route}`);
+        return response(BODIES[route]);
+      }
+      const name = payerOf(String(init.body));
+      const step = route.endsWith('settle') ? 'settle' : 'verify';
+      events.push(`${step} ${name}`);
+      if (step === 'settle') {
+        if (heldSettles.has(name)) throw new Error(`second settle for ${name}`);
+        await new Promise<void>((release) => heldSettles.set(name, release));
+      }
       return response(BODIES[route]);
     }));
     const { selectedAdapter } = await import('@/lib/adapters');
@@ -183,6 +210,7 @@ describe('two concurrent paid requests on one module', () => {
   });
 
   afterEach(() => {
+    for (const release of heldSettles.values()) release();
     vi.unstubAllEnvs();
     vi.unstubAllGlobals();
   });
@@ -190,33 +218,39 @@ describe('two concurrent paid requests on one module', () => {
   it.each<[string, string]>([
     ['base2', 'jpyc'], ['jpyc', 'base2'], ['base1', 'jpyc'], ['jpyc', 'base1'],
     ['arc', 'jpyc'], ['jpyc', 'arc'], ['arc', 'base2'],
-  ])('%s and %s together each run one verify, one upstream call and one settle', async (first, second) => {
+  ])('%s and %s together each run their own verify, upstream call and settle', async (first, second) => {
     const { GET } = await import('@/app/api/consult/route');
     // 支払いなしの 1 件で出品と USDC 面をキャッシュに入れ、支払い 2 件は同じ条件から始める。
     expect((await GET(new Request(`${resource}?q=warm`))).status).toBe(402);
     events = [];
 
-    const statuses = await Promise.all([first, second].map(async (name) => {
+    const statuses: Record<string, number> = {};
+    const requests = [first, second].map(async (name) => {
       const res = await GET(new Request(`${resource}?q=${name}`, { headers: PAID[name] }));
       events.push(`done ${name}`);
-      return res.status;
-    }));
+      statuses[name] = res.status;
+    });
+    const release = (name: string) => heldSettles.get(name)!();
 
-    expect(statuses).toEqual([200, 200]);
-    const endpoint = (name: string) => (name === 'jpyc' ? 'facilitator' : 'relay');
-    expect([...events].sort()).toEqual([
-      ...[first, second].flatMap((name) => [
-        `adapter ${name}`, `done ${name}`, `fetch ${endpoint(name)} verify`, `fetch ${endpoint(name)} settle`,
-      ]),
-    ].sort());
+    // 2 件とも自分の settle で止まっている間は、どちらも終わらない。
+    await vi.waitFor(() => expect([...heldSettles.keys()].sort()).toEqual([first, second].sort()));
+    expect(statuses).toEqual({});
+
+    // 先の 1 件の settle だけを放すと、その 1 件だけが終わる。
+    release(first);
+    await vi.waitFor(() => expect(statuses).toEqual({ [first]: 200 }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(statuses).toEqual({ [first]: 200 });
+
+    release(second);
+    await vi.waitFor(() => expect(statuses).toEqual({ [first]: 200, [second]: 200 }));
+    await Promise.all(requests);
+
+    // 記録はすべてどちらかの 1 件のもので、各自が自分の支払いの verify → 上流 → settle → 応答を 1 回ずつ通る。
+    const own = (name: string) => events.filter((event) => event.split(' ')[1] === name);
+    expect(own(first).length + own(second).length).toBe(events.length);
     for (const name of [first, second]) {
-      // 上流は verify のあと、settle は上流のあと、応答は settle のあと。
-      const verify = events.indexOf(`fetch ${endpoint(name)} verify`);
-      const settle = events.lastIndexOf(`fetch ${endpoint(name)} settle`);
-      const upstream = events.indexOf(`adapter ${name}`);
-      expect(verify).toBeLessThan(upstream);
-      expect(upstream).toBeLessThan(settle);
-      expect(settle).toBeLessThan(events.indexOf(`done ${name}`));
+      expect(own(name)).toEqual([`verify ${name}`, `adapter ${name}`, `settle ${name}`, `done ${name}`]);
     }
   });
 });

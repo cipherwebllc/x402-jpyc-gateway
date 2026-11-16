@@ -82,7 +82,8 @@ export function choosePayment(
 
 // 1 つの rail の verify / settle。OpenPay の応答をそのまま返す (読み分けは consult がする)。
 // Response が返ったらそのまま返す (USDC の 409 → 402 requirements_mismatch)。
-// pin が合わないときは、OpenPay に何も送らずに throw する。
+// throw するのは、pin や設定が合わず OpenPay に何も送らなかったときと、USDC の relay が 409 で断ったあとに
+// 決済条件を取り直せなかった (取れない・pin が合わない) とき。どちらも請求はない。
 type PurchaseRail = {
   name: 'jpyc' | UsdcRail;
   verify(): Promise<OpenPayReply | Response>;
@@ -172,8 +173,9 @@ export async function consult(request: Request): Promise<Response> {
   try {
     verifyReply = await rail.verify();
   } catch (error) {
-    // pin が合わず、OpenPay には何も送っていない。請求していない。
-    logUnexpected(error, 'verify not sent');
+    // pin や設定が合わず OpenPay に何も送っていないか、relay が 409 で断ったあとに決済条件を取り直せなかった。
+    // どちらも請求していない。
+    logUnexpected(error, 'verify not sent or refused by OpenPay');
     return jsonResponse(500, { error: 'payment_verification_failed' });
   }
   if (verifyReply instanceof Response) return verifyReply;
@@ -202,8 +204,9 @@ export async function consult(request: Request): Promise<Response> {
   try {
     settleReply = await rail.settle();
   } catch (error) {
-    // pin が合わず、OpenPay には何も送っていない。請求していない。
-    logUnexpected(error, 'settle not sent');
+    // pin や設定が合わず OpenPay に何も送っていないか、relay が 409 で断ったあとに決済条件を取り直せなかった。
+    // どちらも請求していない。
+    logUnexpected(error, 'settle not sent or refused by OpenPay');
     return jsonResponse(500, { error: 'payment_settlement_failed' });
   }
   if (settleReply instanceof Response) return settleReply;

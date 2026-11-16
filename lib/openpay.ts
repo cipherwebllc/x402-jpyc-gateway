@@ -31,6 +31,9 @@ export function termsMaxAgeMs(forPayment?: boolean): number {
 export type OpenPayReply = { status: number | null; body: Record<string, unknown> | null };
 
 // 例外を投げない。応答がなくても、本文が読めなくても、OpenPayReply で返す。
+// リダイレクトはたどらない (redirect: 'manual')。たどると、支払いを別の場所へもう一度 POST し、その場所の答えを
+// OpenPay の判定として信じてしまう。3xx はそのまま「その他の状態」として読み分ける (verify は判定なし、
+// settle は結果が分からない)。出品と USDC の決済条件の GET は、中身を出品者の pin と照合するのでここを通らない。
 export async function postToOpenPay(path: string, body: string, timeoutMs: number): Promise<OpenPayReply> {
   let res: Response;
   try {
@@ -38,6 +41,7 @@ export async function postToOpenPay(path: string, body: string, timeoutMs: numbe
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body,
+      redirect: 'manual',
       signal: AbortSignal.timeout(timeoutMs),
     });
   } catch {
