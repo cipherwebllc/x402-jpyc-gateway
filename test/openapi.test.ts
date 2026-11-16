@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { resetAcceptsCache, resetArcProblemLog, resetUsdcFaceCache } from '@/lib/gate';
+import { resetAcceptsCache } from '@/lib/listing';
+import { resetArcProblemLog, resetUsdcFaceCache } from '@/lib/usdcFace';
 import { resetOpenApiCache } from '@/lib/openapi';
 
 vi.mock('@/lib/adapters', () => ({

@@ -2,7 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { Adapter } from '@/lib/adapters/types';
 import { selectedAdapter } from '@/lib/adapters';
-import { resetAcceptsCache, resetArcProblemLog, resetUsdcFaceCache } from '@/lib/gate';
+import { resetAcceptsCache } from '@/lib/listing';
+import { resetArcProblemLog, resetUsdcFaceCache } from '@/lib/usdcFace';
 
 vi.mock('@/lib/adapters', () => ({
   selectedAdapter: vi.fn(),

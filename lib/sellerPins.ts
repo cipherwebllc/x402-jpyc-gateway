@@ -1,19 +1,6 @@
 // Seller-owned trust anchors and validation, matching openpay-x402-sdk 0.10.0.
-import type { PaymentRequirements, UsdcFace } from './gate';
 import { decodePaymentHeader } from './paymentHeader';
-
-export type SellerConfig = {
-  resourceId: string;
-  resourceUrl: string;
-  expectedRecipient: string;
-  expectedUsdcRecipient?: string;
-};
-
-export type CatalogItem = {
-  id: string;
-  resource: string;
-  accepts: PaymentRequirements[];
-};
+import type { CatalogItem, SellerConfig, UsdcFace } from './types';
 
 function record(value: unknown): Record<string, unknown> | undefined {
   return typeof value === 'object' && value !== null && !Array.isArray(value)

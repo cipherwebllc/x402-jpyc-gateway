@@ -19,21 +19,33 @@ Next.js App Router (TypeScript)、Vercel にデプロイ可能。
 
 ## 3. ファイル構成と責務
 
+2026-11-15 のフェーズ B (§19) で lib/gate.ts を責務ごとに分けた。それ以前の節に出てくる
+`lib/gate.ts` / `myAccepts` は、いまの lib/listing.ts / lib/usdcFace.ts / lib/openpay.ts / lib/relay.ts を指す。
+
 ```
-lib/gate.ts               OpenPay 402 ゲート (公式スニペットの TS 化 + 2 変更 + seller pin)
+lib/types.ts              支払いのモジュールが共有する型 (sellerPins.ts もここから読む)
+lib/http.ts               JSON 応答 (no-store) と 402 (x402Version 1) の組み立て
+lib/openpay.ts            OpenPay の origin・決済条件の鮮度 (5 分 / 30 分)・facilitator (JPYC) の verify / settle
+lib/listing.ts            JPYC 出品 (discovery) のキャッシュと、resource だけを差し替えた accepts (acceptsFor)
+lib/usdcFace.ts           USDC 面 (relay/requirements) のキャッシュ・Arc 面の扱い・PAYMENT-REQUIRED
+lib/relay.ts              USDC relay の verify / settle (409 なら面を取り直して 402 requirements_mismatch)
+lib/purchase.ts           GET /api/consult の本体 (consult: 決済条件 → 支払いなしの 402 → q → choosePayment → verify → 上流 → settle)
 lib/sellerPins.ts         必須設定・JPYC/USDC の seller pin 検証
-lib/paymentHeader.ts      買い手/USDC requirements 共通の厳密な base64/JSON デコード
+lib/paymentHeader.ts      base64/JSON デコード (X-PAYMENT・USDC requirements は厳密、PAYMENT-SIGNATURE は relay と同じ規則)
 lib/openapi.ts            x402scan 用の OpenAPI 文書。検証だけ共有し、OpenPay は支払いの経路と別に読む
-instrumentation.ts       Next.js サーバー起動時の必須設定検査
+instrumentation.ts        Next.js サーバー起動時の必須設定検査
 lib/adapters/types.ts     Adapter = (input: { q: string }) => Promise<unknown>
 lib/adapters/http.ts      汎用: UPSTREAM_URL に ?q= を付けて GET、JSON 中継
 lib/adapters/coo-icp.ts   @icp-sdk/core (agent) で canister の clear_conversation → send_message を update call (§18)
 lib/adapters/index.ts     env ADAPTER による選択 (coo-icp | http)
-app/api/consult/route.ts  GET ハンドラ (処理順は §5)
+lib/adapters/catalog.ts   アダプタの名前ごとの設定の有無と、/openapi.json に載せる応答の schema (本体を読まない)
+app/api/consult/route.ts  GET ハンドラ (lib/purchase.ts の consult の Promise をそのまま返す。処理順は §5)
 app/openapi.json/route.ts GET ハンドラ (lib/openapi.ts の文書を返す・確認できなければ 404)
 app/layout.tsx, page.tsx  最小の説明ページ (無くてもよいが案内用に置く)
 test/route.test.ts        ゲート+route の結合テスト (fetch/adapter 全モック)
 test/gate.test.ts         起動設定・出品 pin・キャッシュ・USDC 決済条件のテスト
+test/purchase.test.ts     choosePayment の表と、同時に動くリクエストの順番 (上流・settle の呼び出しと完了の順)
+test/golden.test.ts       /api/consult と /openapi.json の挙動の固定 (§19。編集しない)
 test/openapi.test.ts      /openapi.json の形・404 の条件・/api/consult の 402 が変わらないこと
 test/coo-icp.test.ts      アダプタ単体 (Actor モック)
 README.md                 セットアップ / env / デプロイ / 掲載手順 / curl 確認
@@ -918,3 +930,79 @@ P3 文書が衝突を「片方が失敗」としていた → 片方または両
 2 回目 (修正差分・P0〜P2 なし): P3 120 秒は完了の期限ではない / P3 「回答は捨てられる」「clear で消える」
 は言い過ぎ / P3 `Request` の中の signal を落とす (いまの SDK では起きない)。すべて採用。生き残った変異
 (FIFO を LIFO に・timer を消さない・SDK の signal だけ残す) にもテストを足し、検出することを確かめた。
+
+## 19. フェーズ B: 挙動を変えないリファクタ (2026-11-15)
+
+### 目的
+
+全コードベースのレビュー (2026-11-15) で決めた挙動の変更 (フェーズ C1〜C3) を、それぞれ 1 か所の
+修正で入れられるように、先に支払いのコードを組み替える。外から見える挙動は 1 バイトも変えない。
+
+### 何をどこへ移したか
+
+- lib/gate.ts を責務ごとに分けて削除した (分け方は §3)。
+  - 型 → lib/types.ts。sellerPins.ts も型をここから読むので、gate ⇄ sellerPins の型の循環がなくなった。
+  - `jsonResponse` / `json402` → lib/http.ts。2 つの route の JSON 応答もこれを使う。
+  - OpenPay の origin・決済条件の鮮度 (`termsMaxAgeMs`)・facilitator の verify / settle・
+    `encodePaymentResponse` → lib/openpay.ts。pin の確認は同期のまま (不一致なら何も送らずにその場で throw)。
+  - JPYC 出品のキャッシュ (`myAccepts` → `listingAccepts`) と `acceptsFor` → lib/listing.ts。
+    上書きされるだけの最初の `search = ''` を消した。MY_RESOURCE_URL の確認は残す (sellerConfig() が読むのは
+    discovery を待つ前なので、待つ間に消えた場合はここで `MY_RESOURCE_URL is not set` になる)。
+  - USDC 面のキャッシュ・Arc の問題ログ・`paymentRequiredHeaderFor`・`isArcPayment` → lib/usdcFace.ts。
+  - `relayPayment` (409 での取り直しを含む) → lib/relay.ts。
+  - `decodePaymentSignature` → lib/paymentHeader.ts。厳密な `decodePaymentHeader` と受理する形が違う理由を
+    コメントに書いた。
+- route.ts の GET の中身を lib/purchase.ts の `consult(request)` に移し、JPYC と USDC の 2 本のほぼ同じ手順を
+  その中の 1 本にした。rail ごとに違うのは verify / settle の呼び先・本文の読み替え (`read`: USDC は null を
+  `{}` に、JPYC はそのまま)・理由がないときの error・成功時のヘッダーの 4 点だけ。rail の選び方は純粋な関数
+  `choosePayment` にした (分岐の順番はそのまま)。支払いなしの 402 と q の確認は、いままでどおり rail を選ぶ前に
+  行う。`paymentError` は消した。route.ts の GET は async にせず、consult の Promise をそのまま返す。
+- Promise のジョブの数も変えない (Codex のレビューで 2 回見つかった)。同時に動く別のリクエストとの順番が
+  変わるため:
+  - rail の verify / settle は呼び先の Promise をそのまま返し、await を足さない。`read` は await の直後に
+    同期で呼ぶ。
+  - リクエスト全体を consult という 1 つの async 関数の中で終え、最後に別の async 関数の Promise を return
+    しない (引き継ぐ分だけ完了が遅れる)。
+  - 確かめ方: 支払いなし・各 400 / 402・verify / 上流 / settle の各結果を 3 つの rail で、キャッシュの
+    有無の両方 (118 通り) について、fetch・上流・ログ・完了が何ジョブ目に起きるかを a108724 と比べ、
+    すべて同じだった (このときだけ使った計測で、リポジトリには入れていない)。
+- アダプタの名前ごとの `configured()` と `outputSchema` を lib/adapters/catalog.ts にまとめた。lib/openapi.ts は
+  自前の ADAPTER の判定をやめて、ここの `selectedAdapterSchema()` を使う (呼ぶたびに schema の複製を返す)。
+  catalog.ts はアダプタ本体を import しないので、/openapi.json は ICP の SDK を読み込まない。
+  lib/adapters/index.ts の `selectedAdapter()` は同じ契約 (未知の ADAPTER は throw) のまま、名前だけ catalog.ts
+  から読む。coo-icp.ts と http.ts は変えていない。
+- 試しに置かれていた .isolation-test.tmp.mjs を削除した (mainnet の canister を呼び、0.7.0 で消えた
+  `chat` を使う)。
+- import は一方向で、循環はない (lib/openpay.ts は lib/listing.ts も lib/usdcFace.ts も読まない)。
+
+### 挙動を変えていないことの確かめ方 (golden テスト)
+
+- 組み替える前のコードに対して、最初のコミット (d2001e2) で test/golden.test.ts を書いた (322 件)。
+  /api/consult と /openapi.json のすべての分岐について、応答 (status・全ヘッダー・本文)、OpenPay への fetch
+  (URL・method・ヘッダー・本文・cache・signal の有無) とその順番、アダプタの呼び出し、console.error を
+  記録し、スナップショットと比べる。
+- その後のコミットでは、このテストとスナップショットを編集しない。各コミットで
+  `CI=true npx vitest run test/golden.test.ts` (スナップショットを書き換えない) が通ることを確かめた。
+  sha256 は最初のコミットのときから同じ:
+  - test/golden.test.ts: `c10355a916176b20e1c8e670269326f7144d796934132fab9bf0f6941c9fb1a2`
+  - test/__snapshots__/golden.test.ts.snap: `438edc59c158e0a6e973dd1bed330b92cea7fad0f0abfee9c064d91183e7dd2b`
+- 既存のテストで変えたのは import 先だけ。期待値・テスト名・場面・モックは変えていない。
+- test/purchase.test.ts を新しく足した: `choosePayment` の表と、同じモジュールで同時に動くリクエストの順番。
+  golden は 1 件ずつ動かすので、ジョブの数で変わる順番は golden では見えない。期待値はどれもリファクタ前の
+  コード (a108724) で同じテストを動かして得たもの。
+  - 2 件の支払い (USDC と JPYC など) の verify / 上流 / settle の fetch と応答の順番。rail に await を足していた
+    版 (2030ccb〜8e536dc) では 3 件が失敗する。
+  - 支払いの settle の途中で始めた支払いなしのリクエストと、どちらが先に終わるか。境目の両側を置き、完了が
+    1 ジョブ早まっても遅れても失敗する。最後に runPurchase の Promise を引き継いでいた 3ad21de では
+    3 件が失敗する。
+
+### わざと残したもの (後のフェーズで直す)
+
+- JPYC の facilitator が JSON の `null` を返すと、`isValid` / `success` の読み取りが try の外で TypeError に
+  なり、GET から漏れる (Next の 500)。USDC 側は `null` を `{}` として扱い、402 になる。→ C1
+- verify / settle / relay の応答の HTTP status (`r.ok`) を見ていない。本文の形だけで判定している。→ C1
+- `invalidReason` / `errorReason` は値をそのまま 402 の error に載せる (空文字・数値・オブジェクトも)。
+  理由がないときの error は rail で違う (JPYC は `invalid_payment`、USDC は `payment_invalid`)。→ C1
+- キャッシュの仕組み (取得の通し番号・2 段の TTL・リセットで番号を戻さない・失敗はキャッシュしない) は
+  場所を移しただけ。→ C3
+- `configured()` は env の有無しか見ない (URL として正しいかは見ない)。→ C3
