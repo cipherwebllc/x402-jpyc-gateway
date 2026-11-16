@@ -25,11 +25,11 @@ Next.js App Router (TypeScript)、Vercel にデプロイ可能。
 ```
 lib/types.ts              支払いのモジュールが共有する型 (sellerPins.ts もここから読む)
 lib/http.ts               JSON 応答 (no-store) と 402 (x402Version 1) の組み立て
-lib/openpay.ts            OpenPay の origin・決済条件の鮮度 (5 分 / 30 分)・facilitator (JPYC) の verify / settle
+lib/openpay.ts            OpenPay の origin・決済条件の鮮度 (5 分 / 30 分)・時間切れつきの呼び出し・verify / settle の応答の読み分け (§20)・facilitator (JPYC)
 lib/listing.ts            JPYC 出品 (discovery) のキャッシュと、resource だけを差し替えた accepts (acceptsFor)
 lib/usdcFace.ts           USDC 面 (relay/requirements) のキャッシュ・Arc 面の扱い・PAYMENT-REQUIRED
 lib/relay.ts              USDC relay の verify / settle (409 なら面を取り直して 402 requirements_mismatch)
-lib/purchase.ts           GET /api/consult の本体 (consult: 決済条件 → 支払いなしの 402 → q → choosePayment → verify → 上流 → settle)
+lib/purchase.ts           GET / HEAD /api/consult の本体 (consult: 決済条件 → 支払いなしの 402 → q → choosePayment → verify → 上流 → settle。consultHead: §20)
 lib/sellerPins.ts         必須設定・JPYC/USDC の seller pin 検証
 lib/paymentHeader.ts      base64/JSON デコード (X-PAYMENT・USDC requirements は厳密、PAYMENT-SIGNATURE は relay と同じ規則)
 lib/openapi.ts            x402scan 用の OpenAPI 文書。検証だけ共有し、OpenPay は支払いの経路と別に読む
@@ -39,13 +39,14 @@ lib/adapters/http.ts      汎用: UPSTREAM_URL に ?q= を付けて GET、JSON �
 lib/adapters/coo-icp.ts   @icp-sdk/core (agent) で canister の clear_conversation → send_message を update call (§18)
 lib/adapters/index.ts     env ADAPTER による選択 (coo-icp | http)
 lib/adapters/catalog.ts   アダプタの名前ごとの設定の有無と、/openapi.json に載せる応答の schema (本体を読まない)
-app/api/consult/route.ts  GET ハンドラ (lib/purchase.ts の consult の Promise をそのまま返す。処理順は §5)
+app/api/consult/route.ts  GET と HEAD のハンドラ (lib/purchase.ts の consult / consultHead を呼ぶ。処理順は §5)
 app/openapi.json/route.ts GET ハンドラ (lib/openapi.ts の文書を返す・確認できなければ 404)
 app/layout.tsx, page.tsx  最小の説明ページ (無くてもよいが案内用に置く)
 test/route.test.ts        ゲート+route の結合テスト (fetch/adapter 全モック)
 test/gate.test.ts         起動設定・出品 pin・キャッシュ・USDC 決済条件のテスト
-test/purchase.test.ts     choosePayment の表と、同時に動くリクエストの順番 (上流・settle の呼び出しと完了の順)
-test/golden.test.ts       /api/consult と /openapi.json の挙動の固定 (§19。編集しない)
+test/purchase.test.ts     choosePayment の表と、同時に動く 2 件の支払いがそれぞれ verify → 上流 → settle を 1 回ずつ通ること
+test/openpay.test.ts      OpenPay への呼び出しの時間切れ・verify / settle の応答の読み分け・ログに書く内容・HEAD (§20)
+test/golden.test.ts       /api/consult と /openapi.json の挙動の固定 (§19。挙動を変える PR では、変えた場面だけを更新して差分を PR に書く)
 test/openapi.test.ts      /openapi.json の形・404 の条件・/api/consult の 402 が変わらないこと
 test/coo-icp.test.ts      アダプタ単体 (Actor モック)
 README.md                 セットアップ / env / デプロイ / 掲載手順 / curl 確認
@@ -998,6 +999,8 @@ P3 文書が衝突を「片方が失敗」としていた → 片方または両
 
 ### わざと残したもの (後のフェーズで直す)
 
+(2026-11-16 追記: 「→ C1」の 3 件は §20 で直した。理由がないときの error が rail で違う点は、そのまま残した。)
+
 - JPYC の facilitator が JSON の `null` を返すと、`isValid` / `success` の読み取りが try の外で TypeError に
   なり、GET から漏れる (Next の 500)。USDC 側は `null` を `{}` として扱い、402 になる。→ C1
 - verify / settle / relay の応答の HTTP status (`r.ok`) を見ていない。本文の形だけで判定している。→ C1
@@ -1006,3 +1009,143 @@ P3 文書が衝突を「片方が失敗」としていた → 片方または両
 - キャッシュの仕組み (取得の通し番号・2 段の TTL・リセットで番号を戻さない・失敗はキャッシュしない) は
   場所を移しただけ。→ C3
 - `configured()` は env の有無しか見ない (URL として正しいかは見ない)。→ C3
+
+## 20. フェーズ C1: OpenPay の応答の読み分け・時間切れ・HEAD・v2 の領収ヘッダー・失敗の記録 (2026-11-16)
+
+全コードベースのレビュー (2026-11-15) で決めた挙動の変更の 1 つ目。支払いの経路の挙動が変わる。
+
+### 直したこと
+
+1. **HTTP の状態を見ていなかった。** verify / settle の応答を本文の形だけで判定していたので、503 の本文に
+   `isValid: true` があれば上流を動かし、500 の本文に `success: true` があれば回答を渡していた。
+2. **JPYC の facilitator が JSON の `null` を返すと、例外が GET の外へ漏れていた** (Next の 500)。
+3. **時間切れがなかった。** OpenPay が返事をしないと、リクエストは関数の上限まで待ち続けた。
+4. **settle の 202 (決済が進行中) を 402 で返していた。** 402 は「もう一度払って」の意味なので、買い手の
+   クライアントが払い直すと二重払いになる。
+5. **settle の通信失敗を `payment_settlement_failed` と返していた。** 決済されたかどうかは分からないのに
+   「失敗」と言っていた。
+6. **`invalidReason` / `errorReason` の値をそのまま買い手に返していた** (空文字・数値・オブジェクト・長い文字列も)。
+7. **支払いつきの HEAD が、verify・上流・settle まで進んでいた。** Next は HEAD を書いていない route で GET を
+   代わりに動かす。買い手は請求されるのに、本文 (回答) は返らない。
+8. **Base の v2 (PAYMENT-SIGNATURE) で払った 200 に `PAYMENT-RESPONSE` がなかった** (Arc にはあった)。
+9. **上流の失敗や settle の結果不明を、どこにも記録していなかった** (`catch {}` で握りつぶしていた)。
+
+### OpenPay の応答の読み方 (lib/openpay.ts)
+
+OpenPay への POST はすべて `postToOpenPay` を通る。例外は投げず、`{ status, body }` を返す。応答がなければ
+(通信の失敗・時間切れ) `status` は null。`body` は JSON のオブジェクトだけで、それ以外 (JSON でない・`null`・
+配列・文字列・本文の読み取り中の時間切れ) は null。
+
+verify (`verifyOutcome`):
+
+| OpenPay の応答 | 判定 | 買い手への応答 |
+|---|---|---|
+| 200 で `isValid === true` | valid | 上流へ進む |
+| 200 でそれ以外のオブジェクト | rejected | 402 (理由は `invalidReason`) |
+| 4xx (429 を除く) | rejected | 402 (理由は `invalidReason`、なければ `error`) |
+| 200 で本文が読めない・429・5xx・その他の状態・応答なし | unavailable | 503 `payment_service_unavailable` |
+
+settle (`settleOutcome`):
+
+| OpenPay の応答 | 判定 | 買い手への応答 |
+|---|---|---|
+| 200 で `success === true` | settled | 200 と回答、領収ヘッダー |
+| 200 で `success === false` | rejected | 402 (理由は `errorReason`) |
+| 4xx | rejected | 402 (理由は `errorReason`、なければ `error`) |
+| 202 | pending | 502 `settlement_pending`、本文があれば領収ヘッダー |
+| 200 でそれ以外・5xx・その他の状態・応答なし | unknown | 500 `settlement_unknown` |
+
+- 「請求していない」と言えるのは、OpenPay がはっきり断ったとき (4xx、または 200 で `success: false`) だけ。
+  それ以外で 402 を返さない。200 の `{}` や `success: "true"` は「分からない」に入れる。
+- 5xx は中身を見ない。OpenPay の 503 には「確実に請求していない」もの (`kv_required` など) もあるが、
+  見分けるには理由の一覧をこちらに持つ必要があり、OpenPay 側で理由が増えたときに「請求していない」と
+  誤って言う危険のほうが大きい (計画レビューの裁定 R3)。
+- 202 は facilitator が「送信済みだが未確定」のとき、または同じ支払いの settle が先に進んでいるときに返す。
+  どちらも決済される見込みがあるので、払い直しを求めない。settle の本文 (取引ハッシュを含む) を
+  `X-PAYMENT-RESPONSE` (v2 では `PAYMENT-RESPONSE` も) に入れて返し、買い手が照合できるようにする。
+  **このとき買い手は請求されうるが、回答は受け取れない。** 回答を取っておいて渡し直すには共有ストアが要る
+  (§19 の計画の N1。未対応)。
+- relay の 409 は今までどおり (USDC 面を取り直して 402 `requirements_mismatch`)。OpenPay の relay が 409 を
+  返すのは、決済条件の不一致と rail の不一致の 2 つだけ (origin/main の lib/x402/dualRailRelay.ts で確認)。
+- 理由の値は `^[a-z0-9_]{1,64}$` に合う文字列だけを買い手に返す。合わなければ固定の文字列
+  (verify: JPYC は `invalid_payment`、USDC は `payment_invalid`。settle: `settlement_failed`) にする。
+  verify の固定の文字列が rail で違うのは、OpenPay の 2 つのリファレンスゲートに合わせたまま残した。
+
+### 時間切れ
+
+| 呼び出し | 上限 | 切れたとき |
+|---|---|---|
+| discovery (出品) | 5 秒 | 500 `accepts_unavailable` (今までの通信失敗と同じ) |
+| relay/requirements (USDC 面) | 5 秒 | USDC 面なしで続ける (今までの通信失敗と同じ) |
+| verify | 35 秒 | 503 `payment_service_unavailable` (上流も settle も動かさない) |
+| settle | 60 秒 | 500 `settlement_unknown` (回答は渡さない) |
+
+- verify と settle の上限は、OpenPay 側の処理の上限 (`maxDuration`: facilitator の verify は 15 秒、relay の
+  verify と両方の settle は 30 秒) より長くした。先にこちらが切ると、OpenPay が出すはずだった判定を捨てる
+  ことになる。計画では verify を 15 秒としていたが、relay の verify は 30 秒まで正当にかかりうるので 35 秒に
+  した。
+- 最悪の合計は 5 + 5 + 35 + 上流 (coo-icp は 120 秒で打ち切りを始め、さらに 10 秒ほど。`http` は 30 秒) + 60 ≒ 235 秒で、
+  Vercel の関数の既定の上限 (300 秒) に収まる。
+- `AbortSignal.timeout` を fetch に渡す。本文の読み取りも同じ signal で切れる。
+
+### HEAD (`consultHead`)
+
+- 支払いのヘッダー (`X-PAYMENT` が空でない、または `PAYMENT-SIGNATURE` がある) があれば、OpenPay を呼ばずに
+  405 (`Allow: GET`)。verify・上流・settle は動かない。
+- 支払いのヘッダーがなければ、GET と同じ 402 のヘッダーだけを返す (`PAYMENT-REQUIRED` を含む)。支払いなしの
+  HEAD で決済条件を調べるクライアントは今までどおり動く。OpenPay の掲載の確認は GET だけを使う。
+
+### 領収ヘッダー
+
+- `PAYMENT-SIGNATURE` で払った買い手 (x402 v2) には、Base でも Arc でも `X-PAYMENT-RESPONSE` と同じ値の
+  `PAYMENT-RESPONSE` を付ける。`X-PAYMENT` で払った買い手 (v1) には `X-PAYMENT-RESPONSE` だけ。
+- 502 `settlement_pending` にも同じ規則で付ける。
+
+### 失敗の記録
+
+握りつぶしていた失敗を、`console.error` に 1 行で残す。書くのは固定の言葉・rail の名前 (jpyc / base / arc)・
+HTTP の状態だけ。q・回答・支払いのヘッダー・ウォレット・URL・OpenPay の本文・例外のメッセージは書かない。
+
+| 行 | いつ |
+|---|---|
+| `verify unavailable (jpyc, HTTP 503)` / `(…, no response)` | verify の判定が得られなかった |
+| `upstream failed, not charged (jpyc)` | 上流が失敗した (settle していない) |
+| `settle pending, content not delivered (jpyc, HTTP 202)` | settle が 202 |
+| `settle outcome unknown, content not delivered (base, no response)` | settle の結果が分からない |
+| `payment terms unavailable (unexpected error)` など | sellerPins が理由を記録していない例外 |
+
+最後の 2 種類 (pending / unknown) は、買い手が請求されたのに回答を受け取っていない可能性がある。運用者が
+OpenPay の管理画面と突き合わせるきっかけになる。
+
+### golden テストの変更
+
+321 場面のうち:
+
+- 40 場面は変更なし (OpenPay を呼ばない場面)。
+- 162 場面は、fetch の記録の `hasSignal` が false → true に変わっただけ (時間切れをつけたため)。
+- 119 場面は応答か記録が変わった。内訳 (重なりなし):
+
+  | 件数 | 変わったこと |
+  |---|---|
+  | 38 | verify の判定が得られない場面が 503 `payment_service_unavailable` になった。以前は 500 `payment_verification_failed` (応答なし・JSON でない本文: 8)、402 (本文が `null`・配列・文字列など、または 202 / 429 / 5xx で失敗の形の本文: 20)、上流と settle まで進んで 200 (202 / 429 / 5xx で成功の形の本文: 8)、例外が漏れる (JPYC の `null`: 2) |
+  | 28 | settle の結果が分からない場面が 500 `settlement_unknown` になった。以前は 500 `payment_settlement_failed` (応答なし・JSON でない本文: 8)、402 (本文が `null`・配列・文字列など、または 5xx で失敗の形の本文: 15)、回答つきの 200 (5xx で成功の形の本文: 4)、例外が漏れる (JPYC の `null`: 1) |
+  | 20 | 形の崩れた理由 (空文字・数値・オブジェクト・200 文字) が固定の文字列になった |
+  | 12 | v2 の 200 に `PAYMENT-RESPONSE` が増えた (Base v2) |
+  | 11 | 上流の失敗に記録の 1 行が増えた (応答は同じ) |
+  | 4 | settle の 202 が 502 `settlement_pending` になった。以前は 402 (失敗の形の本文: 2)、回答つきの 200 (成功の形の本文: 2) |
+  | 4 | settle の 400 / 429 で成功の形の本文が、回答つきの 200 から 402 `settlement_failed` になった |
+  | 2 | verify の 400 で成功の形の本文が、上流と settle まで進む 200 から 402 になった |
+- 63 場面を足した: HEAD (12)、settle の 202 (12)、状態と本文の読み分け (39)。
+
+テストの順番の約束も変えた: フェーズ B では「同時に動く 2 件のリクエストの fetch と完了の順番が、リファクタ
+前と同じ」ことまで確かめた (test/purchase.test.ts)。C1 で応答の読み方を変えたのでジョブの数が変わり、
+この順番は変わる。順番は外への約束ではないので、「2 件ともそれぞれ verify → 上流 → settle を 1 回ずつ通って
+200 になる」ことだけを確かめるテストに置き換えた。golden の「8. cache tiers」「9. interleaved fetches」
+(テストが fetch を止めて順番を決める場面) は、`hasSignal` と `PAYMENT-RESPONSE` のほかは変わっていない。
+
+### やっていないこと (次のフェーズ)
+
+- 同じ支払いを同時に何度も送ると、上流がその回数だけ動く (settle は 1 回)。→ C2
+- `maxDuration` の明示と、支払いの有効期限に対する上流の所要時間の確認。→ C2
+- settle が 202 のときに、OpenPay に状態を問い合わせて確定を待つこと。→ C2 で検討
+- 決済条件のキャッシュのまとめ読みと、失敗の直後に読み直さない仕組み。→ C3

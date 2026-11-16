@@ -175,6 +175,7 @@ function defaultReplies(config: Config): Replies {
 // ---------------------------------------------------------------------------------------------
 
 type Env = Record<string, string | undefined>;
+type Handler = 'consult' | 'head' | 'openapi';
 type AdapterMode = 'answer' | 'rejects' | 'undefined' | 'null' | 'bigint' | 'selectThrows';
 type Opts = { replies?: Replies; env?: Env; adapter?: AdapterMode };
 type Target = { path?: string; headers?: Record<string, string> };
@@ -249,6 +250,7 @@ function clock(): string {
 
 type World = {
   consult(label: string, target?: Target): Promise<void>;
+  head(label: string, target?: Target): Promise<void>;
   openapi(label: string): Promise<void>;
   /** Moves the faked clock to T0 + offset. */
   at(offsetMs: number): void;
@@ -315,16 +317,17 @@ async function world(config: Config, opts: Opts = {}): Promise<World> {
       return { answer: 'answer' };
     };
   });
-  const consultGet = (await import('@/app/api/consult/route')).GET;
+  const { GET: consultGet, HEAD: consultHead } = await import('@/app/api/consult/route');
   // Called with a Request so a future handler that reads it keeps working; today it takes none.
   const openapiGet = (await import('@/app/openapi.json/route')).GET as unknown as (
     request: Request,
   ) => Promise<Response>;
 
-  async function send(label: string, handler: 'consult' | 'openapi', url: string, headers: Record<string, string>) {
+  async function send(label: string, handler: Handler, url: string, headers: Record<string, string>) {
     const entry: Json = {
       label,
       at: clock(),
+      ...(handler === 'head' ? { method: 'HEAD' } : {}),
       url,
       ...(Object.keys(headers).length > 0
         ? { headers: Object.fromEntries(Object.entries(headers).map(([k, v]) => [k, legend(v)])) }
@@ -333,10 +336,9 @@ async function world(config: Config, opts: Opts = {}): Promise<World> {
     requests.push(entry);
     timeline.push(`▶ ${label}`);
     try {
-      const request = new Request(url, { headers });
-      entry.response = await responseRecord(
-        await (handler === 'consult' ? consultGet(request) : openapiGet(request)),
-      );
+      const request = new Request(url, { headers, ...(handler === 'head' ? { method: 'HEAD' } : {}) });
+      const handle = { consult: consultGet, head: consultHead, openapi: openapiGet }[handler];
+      entry.response = await responseRecord(await handle(request));
     } catch (error) {
       entry.response = thrownRecord(error);
     }
@@ -345,6 +347,8 @@ async function world(config: Config, opts: Opts = {}): Promise<World> {
   return {
     consult: (label, target = {}) =>
       send(label, 'consult', `${REQUEST_ORIGIN}/api/consult${target.path ?? '?q=hello'}`, target.headers ?? {}),
+    head: (label, target = {}) =>
+      send(label, 'head', `${REQUEST_ORIGIN}/api/consult${target.path ?? '?q=hello'}`, target.headers ?? {}),
     openapi: (label) => send(label, 'openapi', `${REQUEST_ORIGIN}/openapi.json`, {}),
     at: (offsetMs) => vi.setSystemTime(T0 + offsetMs),
     replies: setReplies,
@@ -385,7 +389,7 @@ afterEach(() => {
 // Scenario runners
 // ---------------------------------------------------------------------------------------------
 
-type Case = Opts & Target & { config: Config; handler?: 'consult' | 'openapi' };
+type Case = Opts & Target & { config: Config; handler?: Handler };
 type Sequence = { config: Config; opts?: Opts; run: (w: World) => Promise<void> };
 
 function cases(title: string, table: Record<string, Case>): void {
@@ -393,7 +397,9 @@ function cases(title: string, table: Record<string, Case>): void {
     for (const [name, c] of Object.entries(table)) {
       it(name, async () => {
         const w = await world(c.config, c);
-        await (c.handler === 'openapi' ? w.openapi('request') : w.consult('request', c));
+        if (c.handler === 'openapi') await w.openapi('request');
+        else if (c.handler === 'head') await w.head('request', c);
+        else await w.consult('request', c);
         expect(w.record()).toMatchSnapshot();
       });
     }
@@ -1305,3 +1311,71 @@ sequences('11b. /openapi.json caching and /api/consult interleaving', {
     await w.openapi('C at 1:00');
   }, PAID_LISTING),
 });
+
+// ---------------------------------------------------------------------------------------------
+// 12. HEAD /api/consult: nothing is sold on HEAD
+// ---------------------------------------------------------------------------------------------
+
+cases('12. HEAD /api/consult', {
+  'unpaid, USDC off': { config: 'off', handler: 'head' },
+  'unpaid, Base + Arc face': { config: 'arc', handler: 'head' },
+  'unpaid without q': { config: 'base', handler: 'head', path: '' },
+  'unpaid with an empty X-PAYMENT (unpaid, as on GET)': { config: 'base', handler: 'head', headers: xPayment('') },
+  'unpaid while discovery answers 503': {
+    config: 'base', handler: 'head', replies: { discovery: json({ error: 'unavailable' }, 503) },
+  },
+  'X-PAYMENT (JPYC)': { config: 'base', handler: 'head', headers: xPayment(fx.paymentHeader) },
+  'X-PAYMENT (USDC Base v1)': { config: 'base', handler: 'head', headers: xPayment(USDC_V1_PAYMENT) },
+  'PAYMENT-SIGNATURE (Base v2)': { config: 'base', handler: 'head', headers: signature(SIG_BASE) },
+  'PAYMENT-SIGNATURE (Arc v2)': { config: 'arc', handler: 'head', headers: signature(SIG_ARC) },
+  'empty PAYMENT-SIGNATURE': { config: 'base', handler: 'head', headers: signature('') },
+  'X-PAYMENT without q': { config: 'base', handler: 'head', path: '', headers: xPayment(fx.paymentHeader) },
+  'X-PAYMENT that is not base64': { config: 'off', handler: 'head', headers: xPayment('not valid base64') },
+});
+
+// ---------------------------------------------------------------------------------------------
+// 13. Settle answered 202 (still in flight): no 402, the settle body goes back as the receipt
+// ---------------------------------------------------------------------------------------------
+
+const PENDING = { success: false, errorReason: 'pending', transaction: '0xpending' };
+const PENDING_RAILS: Array<[string, Config, Record<string, string>, Route]> = [
+  ['JPYC', 'off', xPayment(fx.paymentHeader), 'facilitatorSettle'],
+  ['USDC Base v1', 'base', xPayment(USDC_V1_PAYMENT), 'relaySettle'],
+  ['USDC Base v2', 'base', signature(SIG_BASE), 'relaySettle'],
+  ['USDC Arc v2', 'arc', signature(SIG_ARC), 'relaySettle'],
+];
+
+cases('13. settle pending (202)', Object.fromEntries(PENDING_RAILS.flatMap(([rail, config, headers, settle]) => [
+  [`${rail}: pending body`, { config, headers, replies: { [settle]: json(PENDING, 202) } }],
+  [`${rail}: 202 with JSON null`, { config, headers, replies: { [settle]: json(null, 202) } }],
+  [`${rail}: 202 with a non-JSON body`, { config, headers, replies: { [settle]: text('accepted', 202) } }],
+])));
+
+// ---------------------------------------------------------------------------------------------
+// 14. How verify / settle answers are read: status first, then the body
+// ---------------------------------------------------------------------------------------------
+
+const READ_RAILS: Array<[string, Config, Record<string, string>, Route, Route]> = [
+  ['JPYC', 'off', xPayment(fx.paymentHeader), 'facilitatorVerify', 'facilitatorSettle'],
+  ['USDC Base v2', 'base', signature(SIG_BASE), 'relayVerify', 'relaySettle'],
+  ['USDC Arc v2', 'arc', signature(SIG_ARC), 'relayVerify', 'relaySettle'],
+];
+
+cases('14. reading verify / settle answers', Object.fromEntries(READ_RAILS.flatMap(([rail, config, headers, verify, settle]) => [
+  // A rejection whose reason is in `error` (the relay's error shape) or missing.
+  [`${rail}: verify 400 with error code`,
+    { config, headers, replies: { [verify]: json({ error: 'authorization_in_use' }, 400) } }],
+  [`${rail}: verify 404 with error code`, { config, headers, replies: { [verify]: json({ error: 'not_found' }, 404) } }],
+  [`${rail}: verify 413 with a non-JSON body`, { config, headers, replies: { [verify]: text('too large', 413) } }],
+  [`${rail}: verify 400 with a sentence as the reason`,
+    { config, headers, replies: { [verify]: json({ isValid: false, invalidReason: 'Signature is invalid!' }, 400) } }],
+  [`${rail}: verify 200 with isValid "true" (a string)`, { config, headers, replies: { [verify]: json({ isValid: 'true' }) } }],
+  [`${rail}: verify 200 with an empty object`, { config, headers, replies: { [verify]: json({}) } }],
+  [`${rail}: verify 201`, { config, headers, replies: { [verify]: json({ isValid: true }, 201) } }],
+  [`${rail}: settle 400 with error code`, { config, headers, replies: { [settle]: json({ error: 'reservation_invalid' }, 400) } }],
+  [`${rail}: settle 413 with a non-JSON body`, { config, headers, replies: { [settle]: text('too large', 413) } }],
+  [`${rail}: settle 200 with an empty object`, { config, headers, replies: { [settle]: json({}) } }],
+  [`${rail}: settle 200 with success "true" (a string)`, { config, headers, replies: { [settle]: json({ success: 'true' }) } }],
+  [`${rail}: settle 200 reverted`, { config, headers, replies: { [settle]: json({ success: false, errorReason: 'reverted' }) } }],
+  [`${rail}: settle 201`, { config, headers, replies: { [settle]: json({ success: true }, 201) } }],
+])));

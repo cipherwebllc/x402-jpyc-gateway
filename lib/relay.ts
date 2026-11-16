@@ -1,7 +1,7 @@
 // OpenPay の USDC relay (Base / Arc) への verify / settle。
 
 import { json402 } from './http';
-import { OPENPAY_ORIGIN } from './openpay';
+import { postToOpenPay, SETTLE_TIMEOUT_MS, VERIFY_TIMEOUT_MS, type OpenPayReply } from './openpay';
 import { arcFaceProblem, rejectSellerRequirements, sellerConfig, validateUsdcFace } from './sellerPins';
 import type { PaymentRequirements, UsdcFace, UsdcRail } from './types';
 import { paymentRequiredHeaderFor, resetUsdcFaceCache, usdcFace } from './usdcFace';
@@ -13,7 +13,7 @@ export function relayPayment(
   face: UsdcFace,
   jpycAccepts: PaymentRequirements[],
   rail: UsdcRail = 'base',
-): Promise<Record<string, unknown> | Response> {
+): Promise<OpenPayReply | Response> {
   const config = sellerConfig();
   validateUsdcFace(face, config);
   if (rail === 'arc' && (!face.arc || arcFaceProblem(face, config) !== null)) {
@@ -26,18 +26,16 @@ export function relayPayment(
     paymentRequirements: rail === 'arc' ? face.arc!.v2Accept : face.v1Accepts,
     ...headers,
   });
-  return fetch(OPENPAY_ORIGIN + '/api/x402/relay/' + path, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
+  return postToOpenPay(
+    '/api/x402/relay/' + path,
     body,
-  }).then(async (r) => {
-    if (r.status === 409) {
-      resetUsdcFaceCache();
-      // Re-pin changed terms and ask the buyer again without replaying the payment.
-      const fresh = await usdcFace({ forPayment: true });
-      if (!fresh) rejectSellerRequirements('OpenPay USDC requirements unavailable');
-      return json402([...jpycAccepts, fresh.v1Accepts], 'requirements_mismatch', paymentRequiredHeaderFor(fresh));
-    }
-    return r.json();
+    path === 'verify' ? VERIFY_TIMEOUT_MS : SETTLE_TIMEOUT_MS,
+  ).then(async (reply) => {
+    if (reply.status !== 409) return reply;
+    resetUsdcFaceCache();
+    // Re-pin changed terms and ask the buyer again without replaying the payment.
+    const fresh = await usdcFace({ forPayment: true });
+    if (!fresh) rejectSellerRequirements('OpenPay USDC requirements unavailable');
+    return json402([...jpycAccepts, fresh.v1Accepts], 'requirements_mismatch', paymentRequiredHeaderFor(fresh));
   });
 }

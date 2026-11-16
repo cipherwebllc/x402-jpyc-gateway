@@ -2,7 +2,7 @@
 // accepts の resource だけを実際のリクエスト URL に差し替える
 // (金銭フィールドはカタログ掲載値のまま — 改ざん検知と両立させるため)。
 
-import { OPENPAY_ORIGIN, termsMaxAgeMs } from './openpay';
+import { OPENPAY_ORIGIN, READ_TIMEOUT_MS, termsMaxAgeMs } from './openpay';
 import { rejectSellerRequirements, sellerConfig, validateJpycListing } from './sellerPins';
 import type { CatalogItem, PaymentRequirements } from './types';
 
@@ -31,6 +31,7 @@ async function listingAccepts(maxAgeMs: number): Promise<PaymentRequirements[]> 
   try {
     res = await fetch(OPENPAY_ORIGIN + '/api/discovery/' + encodeURIComponent(config.resourceId), {
       cache: 'no-store',
+      signal: AbortSignal.timeout(READ_TIMEOUT_MS),
     });
   } catch {
     rejectSellerRequirements('OpenPay temporarily unavailable (discovery request failed)');

@@ -158,7 +158,10 @@ describe('pinned discovery', () => {
     const fetchMock = vi.fn().mockResolvedValue(response({ ...listing, id: 'seller/id?query#fragment' }));
     vi.stubGlobal('fetch', fetchMock);
     await acceptsFor(resource);
-    expect(fetchMock).toHaveBeenCalledExactlyOnceWith(`${OPENPAY}/api/discovery/seller%2Fid%3Fquery%23fragment`, { cache: 'no-store' });
+    expect(fetchMock).toHaveBeenCalledExactlyOnceWith(
+      `${OPENPAY}/api/discovery/seller%2Fid%3Fquery%23fragment`,
+      { cache: 'no-store', signal: expect.any(AbortSignal) },
+    );
   });
 
   it('caches validated requirements for five minutes and revalidates after expiry', async () => {

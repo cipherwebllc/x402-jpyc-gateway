@@ -136,7 +136,7 @@ OpenPay 本体の出品フォームで USDC 面の「Arc (Circle Gateway) でも
 - **売上は受取アドレスの Gateway 残高に入り、受け取るには引き出し (withdraw) が必要です** (Base は直接着金)。受取先は `EXPECTED_USDC_RECIPIENT` と同じアドレスで、**EOA (通常のウォレット) にしてください** — コントラクトウォレットでは引き出せない可能性があります。
 - x402 Bazaar / agentic.market への掲載は Base 側で行われます (CDP は Arc を扱いません)。
 - ゲートは Arc の受取先・ネットワーク・asset・金額 (Base と同額)・ヘッダの並びを検証し、不一致なら USDC と同じく両レールを止めます。署名先の Gateway Wallet・署名ドメイン・有効期間・ヘッダのメタ情報が合わないときは、**Arc だけを提示から外して** Base と JPYC の販売を続け、理由をログに 1 回だけ記録します。
-- Arc で決済できた 200 には `X-PAYMENT-RESPONSE` に加えて `PAYMENT-RESPONSE` (v2) も付きます。Base の 200 は従来どおり `X-PAYMENT-RESPONSE` のみです。
+- `PAYMENT-SIGNATURE` (x402 v2) で決済できた 200 には、Base でも Arc でも `X-PAYMENT-RESPONSE` に加えて同じ値の `PAYMENT-RESPONSE` が付きます。`X-PAYMENT` (v1) で払った 200 は `X-PAYMENT-RESPONSE` のみです。
 - `openpay-x402-sdk` で動かしている出品は Arc を提示しません (このゲートウェイ版が必要です)。
 
 ## x402scan への掲載
@@ -162,9 +162,32 @@ ALLOWED_HOSTS=open-pay.jp,your-gateway.example
 
 成功すると、本文には上流の JSON（coo-icp では `{ "answer": "..." }`）と、`X-PAYMENT-RESPONSE` ヘッダに base64 化された settle 結果が返ります。
 
+## 応答の一覧
+
+処理の順番は「支払いの検証 (verify) → 上流の呼び出し → 決済 (settle) → 回答」です。上流が失敗したら決済しません。
+
+| 応答 | いつ | 請求 |
+|---|---|---|
+| `200` + 回答 + `X-PAYMENT-RESPONSE` | 決済できた | 請求済み |
+| `400 q_required` | 支払いのヘッダーはあるが `q` がない | なし |
+| `402` (`payment_required`) | 支払いのヘッダーがない。決済条件を返します | なし |
+| `402` (理由のコード) | 支払いが通らなかった、または決済を断られた。`error` は OpenPay の理由コード (`insufficient_funds` など)。コードの形でない値は `invalid_payment` / `payment_invalid` / `settlement_failed` に置き換えます | なし |
+| `402 requirements_mismatch` | USDC の決済条件が変わった。新しい条件を返します | なし |
+| `405` | 支払いのヘッダーをつけた `HEAD`。何も動かしません (支払いなしの `HEAD` には 402 のヘッダーだけを返します) | なし |
+| `500 accepts_unavailable` | 出品を確認できない (未掲載・非公開・不一致・OpenPay の一時停止) | なし |
+| `500 payment_verification_failed` / `payment_settlement_failed` | 検証済みの決済条件が受取先の設定と合わなくなった。OpenPay には何も送りません | なし |
+| `502 upstream_error` | 上流が失敗した。決済しません | なし |
+| `503 payment_service_unavailable` | OpenPay が検証の結果を返せなかった (応答なし・429・5xx)。上流も決済も動かしません。支払いの有効期限内なら、時間をおいて同じ支払いで再試行できます | なし |
+| `502 settlement_pending` | 決済が進行中 (OpenPay が 202 を返した)。**回答は返しません。** 決済される見込みなので、払い直さないでください。`X-PAYMENT-RESPONSE` に OpenPay の応答 (取引ハッシュを含む) が入ります | 請求されうる |
+| `500 settlement_unknown` | 決済の結果が分からない (OpenPay の応答なし・5xx)。**回答は返しません。** | 分からない |
+
+最後の 2 つは、買い手が請求されたのに回答を受け取れないことがあります。ゲートウェイは回答を保存しないので、渡し直せません (共有ストアが必要で、未対応です)。この 2 つはサーバーログに `settle pending` / `settle outcome unknown` として残るので、OpenPay の管理画面の売上と突き合わせて、買い手に個別に対応してください。
+
+OpenPay への呼び出しには上限時間があります (出品と USDC の決済条件の読み取りは 5 秒、verify は 35 秒、settle は 60 秒)。
+
 ## プライバシー
 
-このゲートウェイのアプリケーションは、設定不足・出品取得失敗・受取先や決済条件の不一致について固定の理由だけをサーバーログに記録します。ログとエラーレスポンスに質問、回答、支払いデータ、ウォレットアドレス、リソース URL は含めません。全レスポンスは `Cache-Control: no-store` です。
+このゲートウェイのアプリケーションは、設定不足・出品取得失敗・受取先や決済条件の不一致・上流の失敗・OpenPay の検証や決済の結果が得られなかったことについて、固定の理由 (と rail の名前、HTTP の状態) だけをサーバーログに記録します。ログとエラーレスポンスに質問、回答、支払いデータ、ウォレットアドレス、リソース URL は含めません。全レスポンスは `Cache-Control: no-store` です。
 
 ただし、構造上 `q` はリソース URL のクエリとして OpenPay に、また上流（coo-icp または `UPSTREAM_URL`）に届きます。Vercel などのプラットフォームアクセスログにも記録される可能性があります。このリポジトリだけでそれら外部ログを制御することはできません。
 
