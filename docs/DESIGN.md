@@ -327,6 +327,8 @@ verify→upstream→settle の正順維持、USDC 面の可用性障害時は JP
    → 200 + 確定済み body + `X-PAYMENT-RESPONSE: base64(JSON(settlement))`。
    relay 409 の 402 Response はそのまま返し、支払いも上流処理も自動再実行しない。
    relay fetch・再取得・再検証の例外は既存と同じ 500 (payment_verification_failed / payment_settlement_failed)
+   (§20 で変更: relay の応答なし・読めない応答は 503 `payment_service_unavailable` / 500 `settlement_unknown`。
+   この 2 つの 500 が残るのは、送る前の pin の不一致と、409 のあとの再取得・再検証の失敗だけ)
 9. USDC accepts の金銭フィールド (payTo/amount/asset/resource) は**手で組まず返り値をそのまま**
    (参照実装も v1Accepts を無加工で並記。買い手スモークは resource 照合をしない)
 
@@ -1036,9 +1038,10 @@ OpenPay への POST はすべて `postToOpenPay` を通る。例外は投げず�
 (通信の失敗・時間切れ) `status` は null。`body` は JSON のオブジェクトだけで、それ以外 (JSON でない・`null`・
 配列・文字列・本文の読み取り中の時間切れ) は null。
 
-リダイレクトはたどらない (`redirect: 'manual'`)。fetch の既定のままだと、OpenPay が 3xx を返したときに支払いを
-`Location` の先へもう一度 POST し、その先の答えを OpenPay の判定として信じてしまう (verify の先が 200
-`isValid: true` なら上流が動き、settle の先が 400 なら払い直しを促す 402 になる)。3xx は下の表の「その他の状態」に
+リダイレクトはたどらない (`redirect: 'manual'`)。fetch の既定のままだと、OpenPay が 3xx を返したときに
+`Location` の先へ進み、その先の答えを OpenPay の判定として信じてしまう (verify の先が 200
+`isValid: true` なら上流が動き、settle の先が 400 なら払い直しを促す 402 になる)。307 / 308 では支払いの本文も
+その先へ POST し直す (301 / 302 / 303 では本文なしの GET に変わる)。3xx は下の表の「その他の状態」に
 入る (verify は 503、settle は 500 `settlement_unknown`)。出品 (discovery) と USDC の決済条件
 (relay/requirements) の GET は変えていない。中身を出品者の pin と照合するため。
 
@@ -1176,6 +1179,11 @@ OpenPay の管理画面と突き合わせるきっかけになる。
 4. **502 `settlement_pending` に必ず取引ハッシュつきの領収ヘッダーが付くように書いていた (P3)。** 付くのは
    202 の本文が JSON のオブジェクトのときだけで、ハッシュは OpenPay が入れたときだけ。README と上の 202 の項を
    直した。
+
+修正の差分も Codex に確認させた (4 件とも修正済み・P0〜P2 の新しい指摘はなし)。そのとき出た文書の言い回しの
+指摘 3 件 (P3) も直した: リダイレクトで本文を送り直すのは 307 / 308 だけであること、402 `requirements_mismatch` は
+rail の不一致でも返ること、README の 503 / 500 `settlement_unknown` の行に 3xx と読めない 200 を足すこと。
+あわせて、README の 200 の行に `PAYMENT-RESPONSE` を足し、§13 の古い記述に §20 への注記を付けた。
 
 ### やっていないこと (次のフェーズ)
 
