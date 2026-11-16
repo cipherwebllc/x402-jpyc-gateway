@@ -10,6 +10,7 @@ import {
   MAX_UPSTREAM_SECONDS,
   releaseAuthorization,
   resetClaims,
+  retainAuthorization,
   SETTLEMENT_GRACE_SECONDS,
   usdcAuthorizationClaim,
   usdcTerms,
@@ -131,19 +132,40 @@ describe('claimAuthorization', () => {
     expect(claimAuthorization(claimFor(NOW + 1000)).ok).toBe(true);
   });
 
-  it('lets only the owner release a claim', () => {
+  it('lets only the owner release or retain a claim', () => {
     const first = claimAuthorization(claimFor(NOW + WINDOW + 10));
     if (!first.ok) throw new Error('not claimed');
-    // The claim expires, and another request claims the same key again.
+    retainAuthorization(first.claim);
+    // The retained claim expires, and another request claims the same key again.
     vi.spyOn(Date, 'now').mockReturnValue((NOW + WINDOW + 10) * 1000);
     const later = claimFor(NOW + 2 * WINDOW + 10);
     expect(claimAuthorization(later).ok).toBe(true);
     releaseAuthorization(first.claim);
+    retainAuthorization(first.claim);
     expect(claimAuthorization(later)).toEqual({ ok: false, reason: 'authorization_reserved' });
+    // The new claim is still being processed: past its validBefore it is still held (the stale retain did not
+    // give it an expiry).
+    vi.spyOn(Date, 'now').mockReturnValue((NOW + 2 * WINDOW + 10) * 1000);
+    expect(claimAuthorization(claimFor(NOW + 3 * WINDOW + 10))).toEqual({ ok: false, reason: 'authorization_reserved' });
   });
 
-  it('forgets a claim at validBefore', () => {
+  it('reports a reserved key before a short window (a replay near expiry is never asked to pay again)', () => {
+    expect(claimAuthorization(claimFor(NOW + WINDOW)).ok).toBe(true);
+    vi.spyOn(Date, 'now').mockReturnValue((NOW + 1) * 1000);
+    expect(claimAuthorization(claimFor(NOW + WINDOW))).toEqual({ ok: false, reason: 'authorization_reserved' });
+  });
+
+  it('never forgets a claim still being processed, even past validBefore', () => {
     expect(claimAuthorization(claimFor(NOW + 1000)).ok).toBe(true);
+    vi.spyOn(Date, 'now').mockReturnValue((NOW + 10 * 86_400) * 1000);
+    // The same key re-signed with a later validBefore (a USDC nonce) is still reserved.
+    expect(claimAuthorization(claimFor(NOW + 11 * 86_400))).toEqual({ ok: false, reason: 'authorization_reserved' });
+  });
+
+  it('forgets a retained claim at validBefore', () => {
+    const first = claimAuthorization(claimFor(NOW + 1000));
+    if (!first.ok) throw new Error('not claimed');
+    retainAuthorization(first.claim);
     // The same key (a USDC nonce re-signed with a later validBefore) is still reserved just before…
     vi.spyOn(Date, 'now').mockReturnValue((NOW + 1000 - 1) * 1000);
     expect(claimAuthorization(claimFor(NOW + 1000 + WINDOW))).toEqual({ ok: false, reason: 'authorization_reserved' });
@@ -152,9 +174,11 @@ describe('claimAuthorization', () => {
     expect(claimAuthorization(claimFor(NOW + 1000 + WINDOW)).ok).toBe(true);
   });
 
-  it('forgets a claim after 8 days even when validBefore is later', () => {
+  it('forgets a retained claim 8 days after it was taken, even when validBefore is later', () => {
     const farFuture = NOW + 365 * 86_400;
-    expect(claimAuthorization(claimFor(farFuture)).ok).toBe(true);
+    const first = claimAuthorization(claimFor(farFuture));
+    if (!first.ok) throw new Error('not claimed');
+    retainAuthorization(first.claim);
     vi.spyOn(Date, 'now').mockReturnValue((NOW + 8 * 86_400 - 1) * 1000);
     expect(claimAuthorization(claimFor(farFuture))).toEqual({ ok: false, reason: 'authorization_reserved' });
     vi.spyOn(Date, 'now').mockReturnValue((NOW + 8 * 86_400) * 1000);

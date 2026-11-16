@@ -56,7 +56,7 @@ const MAX_WAITING = 32;
 
 // 1 リクエスト (slot の空き待ち + clear + send) の期限。応答しない呼び出しが slot を
 // 握り続けると後続が永久に待つので、期限で通信を打ち切り、slot を finally で返させる。
-const DEADLINE_MS = 120_000;
+export const DEADLINE_MS = 120_000;
 const DEADLINE_EXCEEDED = 'coo-icp deadline exceeded';
 
 function acquireSlot(signal: AbortSignal): Promise<number> {

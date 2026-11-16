@@ -10,6 +10,7 @@ import {
   jpycTerms,
   MAX_UPSTREAM_SECONDS,
   releaseAuthorization,
+  retainAuthorization,
   usdcAuthorizationClaim,
   usdcTerms,
   type AuthorizationClaim,
@@ -242,10 +243,10 @@ async function runUpstream(q: string): Promise<Upstream> {
   }
 }
 
-// 予約を外すかどうか。settle を送る前に終われば外す (請求していないので、同じ支払いで出直せる)。
+// 要求が終わったときに予約をどうするか。settle を送る前に終われば外す (請求していないので、同じ支払いで出直せる)。
 // settle を送ったら、結果にかかわらず残す。上流が時間切れのときは、上流の呼び出しが終わってから外す
 // (先に外すと、同じ支払いで上流が同時に 2 回動きうる)。
-type Retention = { keep: boolean };
+type Retention = { then: 'release' | 'retain' | 'release_when_upstream_ends' };
 
 // 失敗の 402 は rail によらず、支払える全 rail の決済条件で返す。
 export async function consult(request: Request): Promise<Response> {
@@ -305,11 +306,12 @@ export async function consult(request: Request): Promise<Response> {
     });
   }
 
-  const retention: Retention = { keep: false };
+  const retention: Retention = { then: 'release' };
   try {
     return await sell(rail, claimed.claim, retention, q, accepts, usdc);
   } finally {
-    if (!retention.keep) releaseAuthorization(claimed.claim);
+    if (retention.then === 'release') releaseAuthorization(claimed.claim);
+    else if (retention.then === 'retain') retainAuthorization(claimed.claim);
   }
 }
 
@@ -350,7 +352,9 @@ async function sell(
 
   const upstream = await runUpstream(q);
   if (upstream.kind === 'timed_out') {
-    retention.keep = true;
+    // Vercel がこの応答のあとでインスタンスを止めると、外すのはその再開まで遅れる (そのあいだの再送は 409)。
+    // 安全な側に倒れるので、そのままにする。
+    retention.then = 'release_when_upstream_ends';
     void upstream.finished.then(() => releaseAuthorization(held));
     logFailure('upstream timed out, not charged', rail);
     return jsonResponse(502, { error: 'upstream_error' });
@@ -360,11 +364,13 @@ async function sell(
     return jsonResponse(502, { error: 'upstream_error' });
   }
 
-  // ここから先は、settle の結果にかかわらず予約を残す。
-  retention.keep = true;
   let settleReply: OpenPayReply | Response;
   try {
-    settleReply = await rail.settle();
+    // rail.settle() は、pin が合わなければ OpenPay に何も送らずにその場で throw する (予約は外れる)。
+    // 呼び出しが返ったら settle を送ったので、ここから先は結果にかかわらず予約を残す。
+    const settling = rail.settle();
+    retention.then = 'retain';
+    settleReply = await settling;
   } catch (error) {
     // pin や設定が合わず OpenPay に何も送っていないか、relay が 409 で断ったあとに決済条件を取り直せなかった。
     // どちらも請求していない。

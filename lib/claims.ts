@@ -2,8 +2,10 @@
 // openpay-x402-sdk 0.11.1 の authorizationClaims.mjs を TS にしたもの (鍵の作り方は同じ)。
 //
 // 予約は verify の前に取る。保っている予約は「この支払いをこのプロセスで処理している途中か、ここで settle まで
-// 進めた」ことを表す。だから、settle を送る前に終わったとき (verify が通らない・上流が失敗した) は外し、
-// settle を送ったら結果にかかわらず残す (同じ支払いをもう一度送っても、上流は動かない)。
+// 進めた」ことを表す。だから、settle を送る前に終わったとき (verify が通らない・上流が失敗した) は外し
+// (releaseAuthorization)、settle を送ったら結果にかかわらず残す (retainAuthorization。同じ支払いをもう一度
+// 送っても、上流は動かない)。処理中の予約は期限が来ても消さない (上流が動いているあいだに同じ支払いを
+// 通さないため)。期限で忘れるのは、残すと決めた予約だけ。
 // プロセスをまたいでは効かない (Vercel の別のインスタンスには届かない)。
 
 import { ARC_MAX_TIMEOUT_SECONDS } from './sellerPins';
@@ -128,7 +130,8 @@ export function usdcAuthorizationClaim(
   ], canonicalDecimal(authorization.validBefore));
 }
 
-const claims = new Map<string, { owner: symbol; expiresAt: bigint }>();
+// expiresAt が null の予約は処理中 (外すか残すかが決まるまで消さない)。
+const claims = new Map<string, { owner: symbol; retainUntil: bigint; expiresAt: bigint | null }>();
 
 function nowSeconds(): bigint {
   return BigInt(Math.ceil(Date.now() / 1000));
@@ -142,24 +145,36 @@ export function hasValidityWindow(claim: AuthorizationClaim): boolean {
 export function claimAuthorization(claim: AuthorizationClaim): ClaimResult {
   const now = nowSeconds();
   for (const [key, held] of claims) {
-    if (held.expiresAt <= now) claims.delete(key);
+    if (held.expiresAt !== null && held.expiresAt <= now) claims.delete(key);
   }
+  // 予約済みかどうかを、期限の窓より先に見る (SDK とは逆の順番)。逆にすると、settle まで進んだ支払いの再送が
+  // 期限の近づいたころに 402 insufficient_validity_window (決済条件つき) になり、最初の支払いが決済されていても
+  // 新しい支払いを促してしまう。
+  if (claims.has(claim.key)) return { ok: false, reason: 'authorization_reserved' };
   if (claim.validBefore - now < REQUIRED_VALIDITY_SECONDS) {
     return { ok: false, reason: 'insufficient_validity_window' };
   }
-  if (claims.has(claim.key)) return { ok: false, reason: 'authorization_reserved' };
   const owner = Symbol('claim');
   const retentionLimit = now + MAX_RETENTION_SECONDS;
   claims.set(claim.key, {
     owner,
-    expiresAt: claim.validBefore < retentionLimit ? claim.validBefore : retentionLimit,
+    retainUntil: claim.validBefore < retentionLimit ? claim.validBefore : retentionLimit,
+    expiresAt: null,
   });
   return { ok: true, claim: { key: claim.key, owner } };
 }
 
-// 取った本人の予約だけを外す (期限切れで消えたあと別の要求が取り直した予約を、古い要求が外さない)。
+// 外すのも残すのも、取った本人の予約だけ (期限切れで消えたあと別の要求が取り直した予約に、古い要求が触らない)。
+
+/** settle を送る前に終わった。請求していないので、同じ支払いで出直せるように外す。 */
 export function releaseAuthorization(claim: HeldClaim): void {
   if (claims.get(claim.key)?.owner === claim.owner) claims.delete(claim.key);
+}
+
+/** settle を送った。結果にかかわらず、支払いの期限 (長くても取ってから 8 日) まで残す。 */
+export function retainAuthorization(claim: HeldClaim): void {
+  const held = claims.get(claim.key);
+  if (held?.owner === claim.owner) held.expiresAt = held.retainUntil;
 }
 
 /** テスト用: 予約をすべて消す。 */

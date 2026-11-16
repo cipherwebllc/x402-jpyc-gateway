@@ -5,6 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { GET, maxDuration } from '@/app/api/consult/route';
 import { selectedAdapter } from '@/lib/adapters';
+import { DEADLINE_MS as COO_ICP_DEADLINE_MS } from '@/lib/adapters/coo-icp';
+import { HTTP_TIMEOUT_MS } from '@/lib/adapters/http';
 import type { Adapter } from '@/lib/adapters/types';
 import { MAX_UPSTREAM_SECONDS, resetClaims, SETTLEMENT_GRACE_SECONDS } from '@/lib/claims';
 import { resetAcceptsCache } from '@/lib/listing';
@@ -19,7 +21,7 @@ import { UPSTREAM_DEADLINE_MS } from '@/lib/purchase';
 import { resetArcProblemLog, resetUsdcFaceCache } from '@/lib/usdcFace';
 
 import {
-  OPENPAY, arcV2Accept, catalogAccept, jpycPayment, jpycPaymentHeader, listing, merchant, paymentSignatureFor,
+  OPENPAY, arcV2Accept, attacker, catalogAccept, jpycPayment, jpycPaymentHeader, listing, merchant, paymentSignatureFor,
   resource, resourceId, response, usdcFaceWithArc, usdcMerchant, usdcV1PaymentHeader, v2Accept,
 } from './fixtures';
 
@@ -171,6 +173,31 @@ describe('authorization claims on GET /api/consult', () => {
       expect(again.status).toBe(after === 'released' ? 200 : 409);
     });
 
+    it('forgets a settled payment at its validBefore (the same nonce signed again is sent to the relay)', async () => {
+      vi.spyOn(Date, 'now').mockReturnValue(NOW_MS);
+      const payment = (validBefore: number) => ({ 'X-PAYMENT': usdcV1PaymentHeader(0x71, { validBefore: String(validBefore) }) });
+      expect((await GET(paid(payment(NOW + 300)))).status).toBe(200);
+      vi.mocked(Date.now).mockReturnValue((NOW + 299) * 1000);
+      expect((await GET(paid(payment(NOW + 600)))).status).toBe(409);
+      vi.mocked(Date.now).mockReturnValue((NOW + 300) * 1000);
+      expect((await GET(paid(payment(NOW + 600)))).status).toBe(200);
+      expect(postsTo('relay verify')).toHaveLength(2);
+    });
+
+    it('releases the claim when settle is refused before anything is sent (the seller pin changed during the upstream call)', async () => {
+      adapter.mockImplementationOnce(async () => {
+        vi.stubEnv('EXPECTED_RECIPIENT', attacker);
+        return { answer: 'first' };
+      });
+      const res = await GET(paid(jpyc(1)));
+      expect(res.status).toBe(500);
+      expect(await res.json()).toEqual({ error: 'payment_settlement_failed' });
+      expect(postsTo('facilitator settle')).toEqual([]);
+
+      vi.stubEnv('EXPECTED_RECIPIENT', merchant);
+      expect((await GET(paid(jpyc(1)))).status).toBe(200);
+    });
+
     it('releases a USDC claim when the relay answers 409 and the terms cannot be fetched again', async () => {
       answers['relay verify'] = [{ error: 'requirements_mismatch' }, 409];
       const fetchMock = vi.mocked(fetch);
@@ -223,6 +250,21 @@ describe('authorization claims on GET /api/consult', () => {
       expect(posts).toEqual([]);
       expect(warnings).toEqual(['[openpay-x402] claim refused: insufficient validity window (jpyc)']);
       expect((await GET(paid(jpyc(2, { validBefore: String(NOW + WINDOW_SECONDS) }))))).toHaveProperty('status', 200);
+    });
+
+    it('answers 409, not a new 402, to a replay near expiry while processing and after settle', async () => {
+      const payment = jpyc(1, { validBefore: String(NOW + WINDOW_SECONDS) });
+      let finish!: () => void;
+      adapter.mockImplementationOnce(() => new Promise((resolve) => { finish = () => resolve({ answer: 'first' }); }));
+      const first = GET(paid(payment));
+      await vi.waitFor(() => expect(adapter).toHaveBeenCalledTimes(1));
+      vi.mocked(Date.now).mockReturnValue(NOW_MS + 1000);
+
+      expect((await GET(paid(payment))).status).toBe(409);
+      finish();
+      expect((await first).status).toBe(200);
+      expect((await GET(paid(payment))).status).toBe(409);
+      expect(adapter).toHaveBeenCalledTimes(1);
     });
 
     it('checks the window again after verify and runs nothing when verify used it up', async () => {
@@ -344,10 +386,33 @@ describe('authorization claims on GET /api/consult', () => {
       expect(adapter).toHaveBeenCalledTimes(2);
     });
 
+    it('keeps the claim of a timed-out upstream call past validBefore until the call ends', async () => {
+      let finish!: () => void;
+      adapter.mockImplementationOnce(() => new Promise((resolve) => { finish = () => resolve({ answer: 'late' }); }));
+      const validFor = (seconds: number) => ({ validBefore: String(Math.ceil(Date.now() / 1000) + seconds) });
+      const first = GET(paid({ 'X-PAYMENT': usdcV1PaymentHeader(0x61, validFor(300)) }));
+      await vi.advanceTimersByTimeAsync(UPSTREAM_DEADLINE_MS);
+      expect((await first).status).toBe(502);
+
+      // Past the first authorization's validBefore, the same payer and nonce signed again.
+      await vi.advanceTimersByTimeAsync(301_000 - UPSTREAM_DEADLINE_MS);
+      expect((await GET(paid({ 'X-PAYMENT': usdcV1PaymentHeader(0x61, validFor(300)) }))).status).toBe(409);
+
+      finish();
+      await vi.advanceTimersByTimeAsync(0);
+      expect((await GET(paid({ 'X-PAYMENT': usdcV1PaymentHeader(0x61, validFor(300)) }))).status).toBe(200);
+      expect(adapter).toHaveBeenCalledTimes(2);
+    });
+
     it('leaves no timer behind when the upstream answers in time', async () => {
       expect((await GET(paid(jpyc(1)))).status).toBe(200);
       expect(vi.getTimerCount()).toBe(0);
     });
+  });
+
+  it('gives every adapter its own deadline below the upstream deadline (so a timed-out call always ends)', () => {
+    expect(COO_ICP_DEADLINE_MS).toBeLessThan(UPSTREAM_DEADLINE_MS);
+    expect(HTTP_TIMEOUT_MS).toBeLessThan(UPSTREAM_DEADLINE_MS);
   });
 
   it('fits the slowest purchase in maxDuration, and settles before the relay forgets an Arc verify (15 minutes)', () => {
