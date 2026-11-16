@@ -4,7 +4,14 @@ export const resourceId = 'resource-id';
 export const merchant = `0x${'ab'.repeat(20)}`;
 export const usdcMerchant = `0x${'cd'.repeat(20)}`;
 export const attacker = '0x1111111111111111111111111111111111111111';
-const forwarder = '0x2222222222222222222222222222222222222222';
+// Polygon の JPYC と OpenPay の forwarder (本番と同じ値)。
+const forwarder = '0x0F4560a777415580F0680F8B56a79B0022C6B848';
+export const feeReceiver = `0x${'ee'.repeat(20)}`;
+export const buyer = `0x${'33'.repeat(20)}`;
+const SIGNATURE = `0x${'cd'.repeat(65)}`;
+// どの場面の時計よりも先 (2100-01-01)。支払いの有効期限そのものは専用のテストで確かめる。
+export const VALID_BEFORE = '4102444800';
+const hex32 = (n: number) => `0x${n.toString(16).padStart(64, '0')}`;
 
 export const catalogAccept = {
   scheme: 'exact',
@@ -14,20 +21,42 @@ export const catalogAccept = {
   description: 'Consultation',
   mimeType: 'application/json',
   payTo: forwarder,
-  asset: '0xE7C3e3dC199E8F12B5A0D0D62cD3E2D5b21A4c29',
+  maxTimeoutSeconds: 600,
+  asset: '0xE7C3D8C9a439feDe00D2600032D5dB0Be71C3c29',
   extra: {
     openpay: {
       mode: 'forwarder-split',
       forwarder,
       merchant,
       merchantValue: '1000000000000000000',
+      feeReceiver,
+      feeValue: '10000000000000000',
     },
   },
 };
 
 export const listing = { id: resourceId, resource, accepts: [catalogAccept] };
-export const paymentPayload = { authorization: 'payment' };
-export const paymentHeader = Buffer.from(JSON.stringify(paymentPayload)).toString('base64');
+const base64Json = (value: unknown) => Buffer.from(JSON.stringify(value)).toString('base64');
+
+/**
+ * 買い手が X-PAYMENT に入れる JPYC の支払い (OpenPay の facilitator が受け取る形)。
+ * n を変えると別の支払い (intentSalt が違う) になる。
+ */
+export function jpycPayment(n = 1, authorization: Record<string, unknown> = {}) {
+  return {
+    x402Version: 1,
+    scheme: 'exact',
+    network: 'eip155:137',
+    payload: {
+      signature: SIGNATURE,
+      authorization: { from: buyer, validAfter: '0', validBefore: VALID_BEFORE, intentSalt: hex32(n), ...authorization },
+    },
+  };
+}
+export const jpycPaymentHeader = (n = 1, authorization: Record<string, unknown> = {}) =>
+  base64Json(jpycPayment(n, authorization));
+export const paymentPayload = jpycPayment();
+export const paymentHeader = base64Json(paymentPayload);
 export const usdcAccept = {
   scheme: 'exact',
   network: 'base',
@@ -95,13 +124,40 @@ export function usdcFaceWithArc(arcAccept: Record<string, unknown> = arcV2Accept
   };
 }
 
-export function paymentSignatureFor(accepted: unknown): string {
-  return Buffer.from(JSON.stringify({
+/** USDC (EIP-3009) の authorization。n を変えると別の支払い (nonce が違う) になる。 */
+export function usdcAuthorization(n: number, over: Record<string, unknown> = {}) {
+  return {
+    from: buyer,
+    to: usdcMerchant,
+    value: usdcAccept.maxAmountRequired,
+    validAfter: '0',
+    validBefore: VALID_BEFORE,
+    nonce: hex32(n),
+    ...over,
+  };
+}
+
+/** 買い手が X-PAYMENT に入れる Base の USDC の支払い (x402 v1)。 */
+export function usdcV1Payment(n = 0x1001, authorization: Record<string, unknown> = {}) {
+  return {
+    x402Version: 1,
+    scheme: 'exact',
+    network: 'base',
+    payload: { signature: SIGNATURE, authorization: usdcAuthorization(n, authorization) },
+  };
+}
+export const usdcV1PaymentHeader = (n = 0x1001, authorization: Record<string, unknown> = {}) =>
+  base64Json(usdcV1Payment(n, authorization));
+
+/** 買い手が PAYMENT-SIGNATURE に入れる支払い (x402 v2)。accepted で Base か Arc かが決まる。 */
+export function paymentSignatureFor(
+  accepted: unknown,
+  n = 0x2001,
+  authorization: Record<string, unknown> = {},
+): string {
+  return base64Json({
     x402Version: 2,
     accepted,
-    payload: {
-      authorization: { from: `0x${'33'.repeat(20)}`, nonce: `0x${'ab'.repeat(32)}` },
-      signature: `0x${'cd'.repeat(65)}`,
-    },
-  })).toString('base64');
+    payload: { authorization: usdcAuthorization(n, authorization), signature: SIGNATURE },
+  });
 }

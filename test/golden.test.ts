@@ -29,9 +29,14 @@ const REQUEST_ORIGIN = 'https://untrusted-request-host.example';
 const REPRICED = '2000000';
 
 const b64 = (value: unknown) => Buffer.from(JSON.stringify(value)).toString('base64');
-const USDC_V1_PAYMENT = b64({ network: 'base', authorization: 'usdc-payment' });
+const USDC_V1_PAYMENT = fx.usdcV1PaymentHeader();
 const SIG_BASE = fx.paymentSignatureFor(fx.v2Accept);
 const SIG_ARC = fx.paymentSignatureFor(fx.arcV2Accept);
+// A second, different payment per rail, for scenarios that pay twice.
+const JPYC_PAYMENT_2 = fx.jpycPaymentHeader(2);
+const USDC_V1_PAYMENT_2 = fx.usdcV1PaymentHeader(0x1002);
+const SIG_BASE_2 = fx.paymentSignatureFor(fx.v2Accept, 0x2002);
+const SIG_ARC_2 = fx.paymentSignatureFor(fx.arcV2Accept, 0x2002);
 const xPayment = (value: string) => ({ 'X-PAYMENT': value });
 const signature = (value: string) => ({ 'PAYMENT-SIGNATURE': value });
 const xPaymentOn = (network: string) => xPayment(b64({ network, authorization: 'usdc-payment' }));
@@ -93,9 +98,16 @@ const LEGEND: Record<string, string> = {
   PAYMENT_REQUIRED_BASE_REPRICED: usdcFaceFor({ amount: REPRICED }).paymentRequiredHeader,
   PAYMENT_REQUIRED_BASE_ARC_REPRICED: usdcFaceFor({ amount: REPRICED, arc: true }).arc!.paymentRequiredHeader,
   X_PAYMENT_JPYC: fx.paymentHeader,
+  X_PAYMENT_JPYC_2: JPYC_PAYMENT_2,
+  // The facilitator is sent the decoded payment, not the header.
+  JPYC_PAYMENT: JSON.stringify(fx.paymentPayload),
+  JPYC_PAYMENT_2: JSON.stringify(fx.jpycPayment(2)),
   X_PAYMENT_USDC_BASE: USDC_V1_PAYMENT,
+  X_PAYMENT_USDC_BASE_2: USDC_V1_PAYMENT_2,
   PAYMENT_SIGNATURE_BASE: SIG_BASE,
+  PAYMENT_SIGNATURE_BASE_2: SIG_BASE_2,
   PAYMENT_SIGNATURE_ARC: SIG_ARC,
+  PAYMENT_SIGNATURE_ARC_2: SIG_ARC_2,
 };
 const LEGEND_BY_LENGTH = Object.entries(LEGEND).sort(([, a], [, b]) => b.length - a.length);
 
@@ -746,7 +758,7 @@ cases('5b. USDC rail selection', {
   'Arc payment with an unpadded PAYMENT-SIGNATURE': {
     config: 'arc',
     headers: signature(unpadded((filler) => ({
-      x402Version: 2, accepted: fx.arcV2Accept, payload: { signature: '0x00', filler },
+      x402Version: 2, accepted: fx.arcV2Accept, payload: { authorization: fx.usdcAuthorization(0x2001), signature: '0x00', filler },
     }))),
   },
   'Arc payment for other Arc terms (Base rail)': {
@@ -812,7 +824,9 @@ cases('7. odd verify / settle bodies', Object.fromEntries(ODD_RAILS.flatMap(([ra
 // ---------------------------------------------------------------------------------------------
 
 const JPYC_PAID = { headers: xPayment(fx.paymentHeader) };
+const JPYC_PAID_2 = { headers: xPayment(JPYC_PAYMENT_2) };
 const BASE_V2_PAID = { headers: signature(SIG_BASE) };
+const BASE_V2_PAID_2 = { headers: signature(SIG_BASE_2) };
 
 sequences('8. cache tiers', {
   'two unpaid requests: one discovery and one requirements fetch': seq('base', async (w) => {
@@ -824,14 +838,14 @@ sequences('8. cache tiers', {
     w.at(4 * MIN);
     await w.consult('paid at 4:00', JPYC_PAID);
     w.at(6 * MIN);
-    await w.consult('paid at 6:00', JPYC_PAID);
+    await w.consult('paid at 6:00', JPYC_PAID_2);
   }),
   'unpaid, then USDC v2 paid after 4 minutes (cached) and 6 minutes (refetched)': seq('base', async (w) => {
     await w.consult('unpaid');
     w.at(4 * MIN);
     await w.consult('paid at 4:00', BASE_V2_PAID);
     w.at(6 * MIN);
-    await w.consult('paid at 6:00', BASE_V2_PAID);
+    await w.consult('paid at 6:00', BASE_V2_PAID_2);
   }),
   'unpaid at 0, 29 and 31 minutes': seq('base', async (w) => {
     await w.consult('at 0');
@@ -852,21 +866,21 @@ sequences('8. cache tiers', {
     w.at(5 * MIN - 1);
     await w.consult('paid at 4:59.999', JPYC_PAID);
     w.at(5 * MIN);
-    await w.consult('paid at 5:00.000', JPYC_PAID);
+    await w.consult('paid at 5:00.000', JPYC_PAID_2);
   }),
   'paid boundary (USDC v1): 4:59.999 cached, 5:00.000 refetched': seq('base', async (w) => {
     await w.consult('unpaid at 0');
     w.at(5 * MIN - 1);
     await w.consult('paid at 4:59.999', { headers: xPayment(USDC_V1_PAYMENT) });
     w.at(5 * MIN);
-    await w.consult('paid at 5:00.000', { headers: xPayment(USDC_V1_PAYMENT) });
+    await w.consult('paid at 5:00.000', { headers: xPayment(USDC_V1_PAYMENT_2) });
   }),
   'paid boundary (Arc v2): 4:59.999 cached, 5:00.000 refetched': seq('arc', async (w) => {
     await w.consult('unpaid at 0');
     w.at(5 * MIN - 1);
     await w.consult('paid at 4:59.999', { headers: signature(SIG_ARC) });
     w.at(5 * MIN);
-    await w.consult('paid at 5:00.000', { headers: signature(SIG_ARC) });
+    await w.consult('paid at 5:00.000', { headers: signature(SIG_ARC_2) });
   }),
   'a paid refetch restarts the unpaid 30-minute window': seq('base', async (w) => {
     await w.consult('unpaid at 0');
@@ -1082,7 +1096,7 @@ sequences('9. interleaved fetches', {
     first.release();
     await a;
     w.at(10 * MIN);
-    const b = w.consult('B paid at 10:00, discovery answers at 15:00.000', JPYC_PAID);
+    const b = w.consult('B paid at 10:00, discovery answers at 15:00.000', JPYC_PAID_2);
     await w.reach(second, b);
     w.at(15 * MIN);
     second.release();
@@ -1109,7 +1123,7 @@ sequences('9. interleaved fetches', {
     first.release();
     await a;
     w.at(10 * MIN);
-    const b = w.consult('B paid at 10:00, requirements answer at 15:00.000', BASE_V2_PAID);
+    const b = w.consult('B paid at 10:00, requirements answer at 15:00.000', BASE_V2_PAID_2);
     await w.reach(second, b);
     w.at(15 * MIN);
     second.release();

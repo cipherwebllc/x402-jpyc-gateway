@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { resetClaims } from '@/lib/claims';
 import { resetAcceptsCache } from '@/lib/listing';
 import { resetArcProblemLog, resetUsdcFaceCache } from '@/lib/usdcFace';
 import { resetOpenApiCache } from '@/lib/openapi';
@@ -57,6 +58,7 @@ describe('GET /openapi.json', () => {
   let fetchMock: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
+    resetClaims();
     resetAcceptsCache();
     resetUsdcFaceCache();
     resetArcProblemLog();
