@@ -244,7 +244,7 @@ exports[`1. unpaid GET /api/consult > empty X-PAYMENT header without q is still 
       },
       "label": "request",
       "response": {
-        "body": "{"x402Version":1,"accepts":[{"scheme":"exact","network":"eip155:137","maxAmountRequired":"1010000000000000000","resource":"https://gateway.example.com/api/consult","description":"Consultation","mimeType":"application/json","payTo":"0x2222222222222222222222222222222222222222","asset":"0xE7C3e3dC199E8F12B5A0D0D62cD3E2D5b21A4c29","extra":{"openpay":{"mode":"forwarder-split","forwarder":"0x2222222222222222222222222222222222222222","merchant":"0xabababababababababababababababababababab","merchantValue":"1000000000000000000"}}},<<USDC_V1_ACCEPT>>],"error":"payment_required"}",
+        "body": "{"x402Version":1,"accepts":[{"scheme":"exact","network":"eip155:137","maxAmountRequired":"1010000000000000000","resource":"https://gateway.example.com/api/consult","description":"Consultation","mimeType":"application/json","payTo":"0x0F4560a777415580F0680F8B56a79B0022C6B848","maxTimeoutSeconds":600,"asset":"0xE7C3D8C9a439feDe00D2600032D5dB0Be71C3c29","extra":{"openpay":{"mode":"forwarder-split","forwarder":"0x0F4560a777415580F0680F8B56a79B0022C6B848","merchant":"0xabababababababababababababababababababab","merchantValue":"1000000000000000000","feeReceiver":"0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee","feeValue":"10000000000000000"}}},<<USDC_V1_ACCEPT>>],"error":"payment_required"}",
         "headers": [
           [
             "cache-control",
@@ -300,7 +300,7 @@ exports[`1. unpaid GET /api/consult > listing with two accepts 1`] = `
       "at": "+0:00.000",
       "label": "request",
       "response": {
-        "body": "{"x402Version":1,"accepts":[<<JPYC_ACCEPT>>,{"scheme":"exact","network":"eip155:137","maxAmountRequired":"2010000000000000000","resource":"https://gateway.example.com/api/consult?q=hello","description":"Consultation","mimeType":"application/json","payTo":"0x2222222222222222222222222222222222222222","asset":"0xE7C3e3dC199E8F12B5A0D0D62cD3E2D5b21A4c29","extra":{"openpay":{"mode":"forwarder-split","forwarder":"0x2222222222222222222222222222222222222222","merchant":"0xabababababababababababababababababababab","merchantValue":"2000000000000000000"}}},<<USDC_V1_ACCEPT>>],"error":"payment_required"}",
+        "body": "{"x402Version":1,"accepts":[<<JPYC_ACCEPT>>,{"scheme":"exact","network":"eip155:137","maxAmountRequired":"2010000000000000000","resource":"https://gateway.example.com/api/consult?q=hello","description":"Consultation","mimeType":"application/json","payTo":"0x0F4560a777415580F0680F8B56a79B0022C6B848","maxTimeoutSeconds":600,"asset":"0xE7C3D8C9a439feDe00D2600032D5dB0Be71C3c29","extra":{"openpay":{"mode":"forwarder-split","forwarder":"0x0F4560a777415580F0680F8B56a79B0022C6B848","merchant":"0xabababababababababababababababababababab","merchantValue":"2000000000000000000","feeReceiver":"0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee","feeValue":"10000000000000000"}}},<<USDC_V1_ACCEPT>>],"error":"payment_required"}",
         "headers": [
           [
             "cache-control",
@@ -356,7 +356,7 @@ exports[`1. unpaid GET /api/consult > no query string 1`] = `
       "at": "+0:00.000",
       "label": "request",
       "response": {
-        "body": "{"x402Version":1,"accepts":[{"scheme":"exact","network":"eip155:137","maxAmountRequired":"1010000000000000000","resource":"https://gateway.example.com/api/consult","description":"Consultation","mimeType":"application/json","payTo":"0x2222222222222222222222222222222222222222","asset":"0xE7C3e3dC199E8F12B5A0D0D62cD3E2D5b21A4c29","extra":{"openpay":{"mode":"forwarder-split","forwarder":"0x2222222222222222222222222222222222222222","merchant":"0xabababababababababababababababababababab","merchantValue":"1000000000000000000"}}},<<USDC_V1_ACCEPT>>],"error":"payment_required"}",
+        "body": "{"x402Version":1,"accepts":[{"scheme":"exact","network":"eip155:137","maxAmountRequired":"1010000000000000000","resource":"https://gateway.example.com/api/consult","description":"Consultation","mimeType":"application/json","payTo":"0x0F4560a777415580F0680F8B56a79B0022C6B848","maxTimeoutSeconds":600,"asset":"0xE7C3D8C9a439feDe00D2600032D5dB0Be71C3c29","extra":{"openpay":{"mode":"forwarder-split","forwarder":"0x0F4560a777415580F0680F8B56a79B0022C6B848","merchant":"0xabababababababababababababababababababab","merchantValue":"1000000000000000000","feeReceiver":"0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee","feeValue":"10000000000000000"}}},<<USDC_V1_ACCEPT>>],"error":"payment_required"}",
         "headers": [
           [
             "cache-control",
@@ -412,7 +412,7 @@ exports[`1. unpaid GET /api/consult > percent-encoded query, extra parameter and
       "at": "+0:00.000",
       "label": "request",
       "response": {
-        "body": "{"x402Version":1,"accepts":[{"scheme":"exact","network":"eip155:137","maxAmountRequired":"1010000000000000000","resource":"https://gateway.example.com/api/consult?q=%E3%81%82&x=1","description":"Consultation","mimeType":"application/json","payTo":"0x2222222222222222222222222222222222222222","asset":"0xE7C3e3dC199E8F12B5A0D0D62cD3E2D5b21A4c29","extra":{"openpay":{"mode":"forwarder-split","forwarder":"0x2222222222222222222222222222222222222222","merchant":"0xabababababababababababababababababababab","merchantValue":"1000000000000000000"}}},<<USDC_V1_ACCEPT>>],"error":"payment_required"}",
+        "body": "{"x402Version":1,"accepts":[{"scheme":"exact","network":"eip155:137","maxAmountRequired":"1010000000000000000","resource":"https://gateway.example.com/api/consult?q=%E3%81%82&x=1","description":"Consultation","mimeType":"application/json","payTo":"0x0F4560a777415580F0680F8B56a79B0022C6B848","maxTimeoutSeconds":600,"asset":"0xE7C3D8C9a439feDe00D2600032D5dB0Be71C3c29","extra":{"openpay":{"mode":"forwarder-split","forwarder":"0x0F4560a777415580F0680F8B56a79B0022C6B848","merchant":"0xabababababababababababababababababababab","merchantValue":"1000000000000000000","feeReceiver":"0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee","feeValue":"10000000000000000"}}},<<USDC_V1_ACCEPT>>],"error":"payment_required"}",
         "headers": [
           [
             "cache-control",
@@ -468,7 +468,7 @@ exports[`1. unpaid GET /api/consult > raw unicode, space and angle brackets in t
       "at": "+0:00.000",
       "label": "request",
       "response": {
-        "body": "{"x402Version":1,"accepts":[{"scheme":"exact","network":"eip155:137","maxAmountRequired":"1010000000000000000","resource":"https://gateway.example.com/api/consult?q=%E3%81%82%20b&a=%3Cb%3E","description":"Consultation","mimeType":"application/json","payTo":"0x2222222222222222222222222222222222222222","asset":"0xE7C3e3dC199E8F12B5A0D0D62cD3E2D5b21A4c29","extra":{"openpay":{"mode":"forwarder-split","forwarder":"0x2222222222222222222222222222222222222222","merchant":"0xabababababababababababababababababababab","merchantValue":"1000000000000000000"}}},<<USDC_V1_ACCEPT>>],"error":"payment_required"}",
+        "body": "{"x402Version":1,"accepts":[{"scheme":"exact","network":"eip155:137","maxAmountRequired":"1010000000000000000","resource":"https://gateway.example.com/api/consult?q=%E3%81%82%20b&a=%3Cb%3E","description":"Consultation","mimeType":"application/json","payTo":"0x0F4560a777415580F0680F8B56a79B0022C6B848","maxTimeoutSeconds":600,"asset":"0xE7C3D8C9a439feDe00D2600032D5dB0Be71C3c29","extra":{"openpay":{"mode":"forwarder-split","forwarder":"0x0F4560a777415580F0680F8B56a79B0022C6B848","merchant":"0xabababababababababababababababababababab","merchantValue":"1000000000000000000","feeReceiver":"0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee","feeValue":"10000000000000000"}}},<<USDC_V1_ACCEPT>>],"error":"payment_required"}",
         "headers": [
           [
             "cache-control",
@@ -3342,7 +3342,7 @@ exports[`3. paid pre-checks > X-PAYMENT network base, USDC off 1`] = `
     {
       "at": "+0:00.000",
       "headers": {
-        "X-PAYMENT": "<<X_PAYMENT_USDC_BASE>>",
+        "X-PAYMENT": "eyJuZXR3b3JrIjoiYmFzZSIsImF1dGhvcml6YXRpb24iOiJ1c2RjLXBheW1lbnQifQ==",
       },
       "label": "request",
       "response": {
@@ -4052,7 +4052,7 @@ exports[`3. paid pre-checks > X-PAYMENT unpadded base64 1`] = `
     {
       "at": "+0:00.000",
       "headers": {
-        "X-PAYMENT": "eyJhdXRob3JpemF0aW9uIjoicGF5bWVudCIsImZpbGxlciI6IngifQ",
+        "X-PAYMENT": "eyJ4NDAyVmVyc2lvbiI6MSwic2NoZW1lIjoiZXhhY3QiLCJuZXR3b3JrIjoiZWlwMTU1OjEzNyIsInBheWxvYWQiOnsic2lnbmF0dXJlIjoiMHhjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkIiwiYXV0aG9yaXphdGlvbiI6eyJmcm9tIjoiMHgzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzIiwidmFsaWRBZnRlciI6IjAiLCJ2YWxpZEJlZm9yZSI6IjQxMDI0NDQ4MDAiLCJpbnRlbnRTYWx0IjoiMHgwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAxIn19LCJmaWxsZXIiOiIifQ",
       },
       "label": "request",
       "response": {
@@ -4513,7 +4513,7 @@ exports[`4. JPYC purchase, USDC arc > success 1`] = `
       "url": "https://open-pay.jp/api/x402/relay/requirements?resourceId=resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -4526,7 +4526,7 @@ exports[`4. JPYC purchase, USDC arc > success 1`] = `
       "url": "https://open-pay.jp/api/facilitator/verify",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -4602,7 +4602,7 @@ exports[`4. JPYC purchase, USDC arc > verify isValid false with invalidReason 1`
       "url": "https://open-pay.jp/api/x402/relay/requirements?resourceId=resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -4685,7 +4685,7 @@ exports[`4. JPYC purchase, USDC base > adapter rejects 1`] = `
       "url": "https://open-pay.jp/api/x402/relay/requirements?resourceId=resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -4763,7 +4763,7 @@ exports[`4. JPYC purchase, USDC base > settle success false with errorReason 1`]
       "url": "https://open-pay.jp/api/x402/relay/requirements?resourceId=resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -4776,7 +4776,7 @@ exports[`4. JPYC purchase, USDC base > settle success false with errorReason 1`]
       "url": "https://open-pay.jp/api/facilitator/verify",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -4858,7 +4858,7 @@ exports[`4. JPYC purchase, USDC base > success 1`] = `
       "url": "https://open-pay.jp/api/x402/relay/requirements?resourceId=resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -4871,7 +4871,7 @@ exports[`4. JPYC purchase, USDC base > success 1`] = `
       "url": "https://open-pay.jp/api/facilitator/verify",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -4951,7 +4951,7 @@ exports[`4. JPYC purchase, USDC base > verify body JSON null 1`] = `
       "url": "https://open-pay.jp/api/x402/relay/requirements?resourceId=resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -5021,7 +5021,7 @@ exports[`4. JPYC purchase, USDC base > verify isValid false with invalidReason 1
       "url": "https://open-pay.jp/api/x402/relay/requirements?resourceId=resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -5096,7 +5096,7 @@ exports[`4. JPYC purchase, USDC off > adapter rejects 1`] = `
       "url": "https://open-pay.jp/api/discovery/resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -5169,7 +5169,7 @@ exports[`4. JPYC purchase, USDC off > adapter returns a BigInt 1`] = `
       "url": "https://open-pay.jp/api/discovery/resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -5238,7 +5238,7 @@ exports[`4. JPYC purchase, USDC off > adapter returns null 1`] = `
       "url": "https://open-pay.jp/api/discovery/resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -5251,7 +5251,7 @@ exports[`4. JPYC purchase, USDC off > adapter returns null 1`] = `
       "url": "https://open-pay.jp/api/facilitator/verify",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -5328,7 +5328,7 @@ exports[`4. JPYC purchase, USDC off > adapter returns undefined 1`] = `
       "url": "https://open-pay.jp/api/discovery/resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -5397,7 +5397,7 @@ exports[`4. JPYC purchase, USDC off > listing with two accepts pays accepts[0] 1
       "url": "https://open-pay.jp/api/discovery/resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -5410,7 +5410,7 @@ exports[`4. JPYC purchase, USDC off > listing with two accepts pays accepts[0] 1
       "url": "https://open-pay.jp/api/facilitator/verify",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -5483,7 +5483,7 @@ exports[`4. JPYC purchase, USDC off > q needing encoding 1`] = `
       "url": "https://open-pay.jp/api/discovery/resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":{"scheme":"exact","network":"eip155:137","maxAmountRequired":"1010000000000000000","resource":"https://gateway.example.com/api/consult?q=%E3%81%82%20b&x=1","description":"Consultation","mimeType":"application/json","payTo":"0x2222222222222222222222222222222222222222","asset":"0xE7C3e3dC199E8F12B5A0D0D62cD3E2D5b21A4c29","extra":{"openpay":{"mode":"forwarder-split","forwarder":"0x2222222222222222222222222222222222222222","merchant":"0xabababababababababababababababababababab","merchantValue":"1000000000000000000"}}}}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":{"scheme":"exact","network":"eip155:137","maxAmountRequired":"1010000000000000000","resource":"https://gateway.example.com/api/consult?q=%E3%81%82%20b&x=1","description":"Consultation","mimeType":"application/json","payTo":"0x0F4560a777415580F0680F8B56a79B0022C6B848","maxTimeoutSeconds":600,"asset":"0xE7C3D8C9a439feDe00D2600032D5dB0Be71C3c29","extra":{"openpay":{"mode":"forwarder-split","forwarder":"0x0F4560a777415580F0680F8B56a79B0022C6B848","merchant":"0xabababababababababababababababababababab","merchantValue":"1000000000000000000","feeReceiver":"0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee","feeValue":"10000000000000000"}}}}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -5496,7 +5496,7 @@ exports[`4. JPYC purchase, USDC off > q needing encoding 1`] = `
       "url": "https://open-pay.jp/api/facilitator/verify",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":{"scheme":"exact","network":"eip155:137","maxAmountRequired":"1010000000000000000","resource":"https://gateway.example.com/api/consult?q=%E3%81%82%20b&x=1","description":"Consultation","mimeType":"application/json","payTo":"0x2222222222222222222222222222222222222222","asset":"0xE7C3e3dC199E8F12B5A0D0D62cD3E2D5b21A4c29","extra":{"openpay":{"mode":"forwarder-split","forwarder":"0x2222222222222222222222222222222222222222","merchant":"0xabababababababababababababababababababab","merchantValue":"1000000000000000000"}}}}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":{"scheme":"exact","network":"eip155:137","maxAmountRequired":"1010000000000000000","resource":"https://gateway.example.com/api/consult?q=%E3%81%82%20b&x=1","description":"Consultation","mimeType":"application/json","payTo":"0x0F4560a777415580F0680F8B56a79B0022C6B848","maxTimeoutSeconds":600,"asset":"0xE7C3D8C9a439feDe00D2600032D5dB0Be71C3c29","extra":{"openpay":{"mode":"forwarder-split","forwarder":"0x0F4560a777415580F0680F8B56a79B0022C6B848","merchant":"0xabababababababababababababababababababab","merchantValue":"1000000000000000000","feeReceiver":"0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee","feeValue":"10000000000000000"}}}}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -5567,7 +5567,7 @@ exports[`4. JPYC purchase, USDC off > selectedAdapter throws 1`] = `
       "url": "https://open-pay.jp/api/discovery/resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -5639,7 +5639,7 @@ exports[`4. JPYC purchase, USDC off > settle body JSON null 1`] = `
       "url": "https://open-pay.jp/api/discovery/resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -5652,7 +5652,7 @@ exports[`4. JPYC purchase, USDC off > settle body JSON null 1`] = `
       "url": "https://open-pay.jp/api/facilitator/verify",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -5726,7 +5726,7 @@ exports[`4. JPYC purchase, USDC off > settle fetch throws 1`] = `
       "url": "https://open-pay.jp/api/discovery/resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -5739,7 +5739,7 @@ exports[`4. JPYC purchase, USDC off > settle fetch throws 1`] = `
       "url": "https://open-pay.jp/api/facilitator/verify",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -5813,7 +5813,7 @@ exports[`4. JPYC purchase, USDC off > settle non-JSON body 1`] = `
       "url": "https://open-pay.jp/api/discovery/resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -5826,7 +5826,7 @@ exports[`4. JPYC purchase, USDC off > settle non-JSON body 1`] = `
       "url": "https://open-pay.jp/api/facilitator/verify",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -5896,7 +5896,7 @@ exports[`4. JPYC purchase, USDC off > settle success false with errorReason 1`] 
       "url": "https://open-pay.jp/api/discovery/resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -5909,7 +5909,7 @@ exports[`4. JPYC purchase, USDC off > settle success false with errorReason 1`] 
       "url": "https://open-pay.jp/api/facilitator/verify",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -5978,7 +5978,7 @@ exports[`4. JPYC purchase, USDC off > settle success false without errorReason 1
       "url": "https://open-pay.jp/api/discovery/resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -5991,7 +5991,7 @@ exports[`4. JPYC purchase, USDC off > settle success false without errorReason 1
       "url": "https://open-pay.jp/api/facilitator/verify",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -6060,7 +6060,7 @@ exports[`4. JPYC purchase, USDC off > success 1`] = `
       "url": "https://open-pay.jp/api/discovery/resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -6073,7 +6073,7 @@ exports[`4. JPYC purchase, USDC off > success 1`] = `
       "url": "https://open-pay.jp/api/facilitator/verify",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -6144,7 +6144,7 @@ exports[`4. JPYC purchase, USDC off > verify body JSON null 1`] = `
       "url": "https://open-pay.jp/api/discovery/resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -6209,7 +6209,7 @@ exports[`4. JPYC purchase, USDC off > verify body a string 1`] = `
       "url": "https://open-pay.jp/api/discovery/resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -6274,7 +6274,7 @@ exports[`4. JPYC purchase, USDC off > verify fetch throws 1`] = `
       "url": "https://open-pay.jp/api/discovery/resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -6335,7 +6335,7 @@ exports[`4. JPYC purchase, USDC off > verify isValid false with invalidReason 1`
       "url": "https://open-pay.jp/api/discovery/resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -6395,7 +6395,7 @@ exports[`4. JPYC purchase, USDC off > verify isValid false without invalidReason
       "url": "https://open-pay.jp/api/discovery/resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -6459,7 +6459,7 @@ exports[`4. JPYC purchase, USDC off > verify non-JSON body 1`] = `
       "url": "https://open-pay.jp/api/discovery/resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -11228,7 +11228,7 @@ exports[`5b. USDC rail selection > Arc payment for other Arc terms (Base rail) 1
       "url": "https://open-pay.jp/api/x402/relay/requirements?resourceId=resource-id",
     },
     {
-      "body": "{"resourceId":"resource-id","paymentRequirements":<<USDC_V1_ACCEPT>>,"paymentSignatureHeader":"eyJ4NDAyVmVyc2lvbiI6MiwiYWNjZXB0ZWQiOnsic2NoZW1lIjoiZXhhY3QiLCJuZXR3b3JrIjoiZWlwMTU1OjUwNDIiLCJhbW91bnQiOiIxIiwiYXNzZXQiOiIweDM2MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAiLCJwYXlUbyI6IjB4Y2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZCIsIm1heFRpbWVvdXRTZWNvbmRzIjo2MDQ5MDAsImV4dHJhIjp7Im5hbWUiOiJHYXRld2F5V2FsbGV0QmF0Y2hlZCIsInZlcnNpb24iOiIxIiwidmVyaWZ5aW5nQ29udHJhY3QiOiIweDc3Nzc3Nzc3RGNjNGQ1QThCNkU0MThGZDA0RDg5OTdlZjExMDAwZUUifX0sInBheWxvYWQiOnsiYXV0aG9yaXphdGlvbiI6eyJmcm9tIjoiMHgzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzIiwibm9uY2UiOiIweGFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWIifSwic2lnbmF0dXJlIjoiMHhjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkIn19"}",
+      "body": "{"resourceId":"resource-id","paymentRequirements":<<USDC_V1_ACCEPT>>,"paymentSignatureHeader":"eyJ4NDAyVmVyc2lvbiI6MiwiYWNjZXB0ZWQiOnsic2NoZW1lIjoiZXhhY3QiLCJuZXR3b3JrIjoiZWlwMTU1OjUwNDIiLCJhbW91bnQiOiIxIiwiYXNzZXQiOiIweDM2MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAiLCJwYXlUbyI6IjB4Y2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZCIsIm1heFRpbWVvdXRTZWNvbmRzIjo2MDQ5MDAsImV4dHJhIjp7Im5hbWUiOiJHYXRld2F5V2FsbGV0QmF0Y2hlZCIsInZlcnNpb24iOiIxIiwidmVyaWZ5aW5nQ29udHJhY3QiOiIweDc3Nzc3Nzc3RGNjNGQ1QThCNkU0MThGZDA0RDg5OTdlZjExMDAwZUUifX0sInBheWxvYWQiOnsiYXV0aG9yaXphdGlvbiI6eyJmcm9tIjoiMHgzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzIiwidG8iOiIweGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2QiLCJ2YWx1ZSI6IjEwMDAwMDAiLCJ2YWxpZEFmdGVyIjoiMCIsInZhbGlkQmVmb3JlIjoiNDEwMjQ0NDgwMCIsIm5vbmNlIjoiMHgwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAyMDAxIn0sInNpZ25hdHVyZSI6IjB4Y2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZCJ9fQ=="}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -11241,7 +11241,7 @@ exports[`5b. USDC rail selection > Arc payment for other Arc terms (Base rail) 1
       "url": "https://open-pay.jp/api/x402/relay/verify",
     },
     {
-      "body": "{"resourceId":"resource-id","paymentRequirements":<<USDC_V1_ACCEPT>>,"paymentSignatureHeader":"eyJ4NDAyVmVyc2lvbiI6MiwiYWNjZXB0ZWQiOnsic2NoZW1lIjoiZXhhY3QiLCJuZXR3b3JrIjoiZWlwMTU1OjUwNDIiLCJhbW91bnQiOiIxIiwiYXNzZXQiOiIweDM2MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAiLCJwYXlUbyI6IjB4Y2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZCIsIm1heFRpbWVvdXRTZWNvbmRzIjo2MDQ5MDAsImV4dHJhIjp7Im5hbWUiOiJHYXRld2F5V2FsbGV0QmF0Y2hlZCIsInZlcnNpb24iOiIxIiwidmVyaWZ5aW5nQ29udHJhY3QiOiIweDc3Nzc3Nzc3RGNjNGQ1QThCNkU0MThGZDA0RDg5OTdlZjExMDAwZUUifX0sInBheWxvYWQiOnsiYXV0aG9yaXphdGlvbiI6eyJmcm9tIjoiMHgzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzIiwibm9uY2UiOiIweGFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWIifSwic2lnbmF0dXJlIjoiMHhjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkIn19"}",
+      "body": "{"resourceId":"resource-id","paymentRequirements":<<USDC_V1_ACCEPT>>,"paymentSignatureHeader":"eyJ4NDAyVmVyc2lvbiI6MiwiYWNjZXB0ZWQiOnsic2NoZW1lIjoiZXhhY3QiLCJuZXR3b3JrIjoiZWlwMTU1OjUwNDIiLCJhbW91bnQiOiIxIiwiYXNzZXQiOiIweDM2MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAiLCJwYXlUbyI6IjB4Y2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZCIsIm1heFRpbWVvdXRTZWNvbmRzIjo2MDQ5MDAsImV4dHJhIjp7Im5hbWUiOiJHYXRld2F5V2FsbGV0QmF0Y2hlZCIsInZlcnNpb24iOiIxIiwidmVyaWZ5aW5nQ29udHJhY3QiOiIweDc3Nzc3Nzc3RGNjNGQ1QThCNkU0MThGZDA0RDg5OTdlZjExMDAwZUUifX0sInBheWxvYWQiOnsiYXV0aG9yaXphdGlvbiI6eyJmcm9tIjoiMHgzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzIiwidG8iOiIweGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2QiLCJ2YWx1ZSI6IjEwMDAwMDAiLCJ2YWxpZEFmdGVyIjoiMCIsInZhbGlkQmVmb3JlIjoiNDEwMjQ0NDgwMCIsIm5vbmNlIjoiMHgwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAyMDAxIn0sInNpZ25hdHVyZSI6IjB4Y2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZCJ9fQ=="}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -11258,7 +11258,7 @@ exports[`5b. USDC rail selection > Arc payment for other Arc terms (Base rail) 1
     {
       "at": "+0:00.000",
       "headers": {
-        "PAYMENT-SIGNATURE": "eyJ4NDAyVmVyc2lvbiI6MiwiYWNjZXB0ZWQiOnsic2NoZW1lIjoiZXhhY3QiLCJuZXR3b3JrIjoiZWlwMTU1OjUwNDIiLCJhbW91bnQiOiIxIiwiYXNzZXQiOiIweDM2MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAiLCJwYXlUbyI6IjB4Y2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZCIsIm1heFRpbWVvdXRTZWNvbmRzIjo2MDQ5MDAsImV4dHJhIjp7Im5hbWUiOiJHYXRld2F5V2FsbGV0QmF0Y2hlZCIsInZlcnNpb24iOiIxIiwidmVyaWZ5aW5nQ29udHJhY3QiOiIweDc3Nzc3Nzc3RGNjNGQ1QThCNkU0MThGZDA0RDg5OTdlZjExMDAwZUUifX0sInBheWxvYWQiOnsiYXV0aG9yaXphdGlvbiI6eyJmcm9tIjoiMHgzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzIiwibm9uY2UiOiIweGFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWIifSwic2lnbmF0dXJlIjoiMHhjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkIn19",
+        "PAYMENT-SIGNATURE": "eyJ4NDAyVmVyc2lvbiI6MiwiYWNjZXB0ZWQiOnsic2NoZW1lIjoiZXhhY3QiLCJuZXR3b3JrIjoiZWlwMTU1OjUwNDIiLCJhbW91bnQiOiIxIiwiYXNzZXQiOiIweDM2MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAiLCJwYXlUbyI6IjB4Y2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZCIsIm1heFRpbWVvdXRTZWNvbmRzIjo2MDQ5MDAsImV4dHJhIjp7Im5hbWUiOiJHYXRld2F5V2FsbGV0QmF0Y2hlZCIsInZlcnNpb24iOiIxIiwidmVyaWZ5aW5nQ29udHJhY3QiOiIweDc3Nzc3Nzc3RGNjNGQ1QThCNkU0MThGZDA0RDg5OTdlZjExMDAwZUUifX0sInBheWxvYWQiOnsiYXV0aG9yaXphdGlvbiI6eyJmcm9tIjoiMHgzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzIiwidG8iOiIweGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2QiLCJ2YWx1ZSI6IjEwMDAwMDAiLCJ2YWxpZEFmdGVyIjoiMCIsInZhbGlkQmVmb3JlIjoiNDEwMjQ0NDgwMCIsIm5vbmNlIjoiMHgwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAyMDAxIn0sInNpZ25hdHVyZSI6IjB4Y2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZCJ9fQ==",
       },
       "label": "request",
       "response": {
@@ -11525,7 +11525,7 @@ exports[`5b. USDC rail selection > Arc payment with the accepted terms in anothe
       "url": "https://open-pay.jp/api/x402/relay/requirements?resourceId=resource-id",
     },
     {
-      "body": "{"resourceId":"resource-id","paymentRequirements":<<ARC_V2_ACCEPT>>,"paymentSignatureHeader":"eyJ4NDAyVmVyc2lvbiI6MiwiYWNjZXB0ZWQiOnsiZXh0cmEiOnsibmFtZSI6IkdhdGV3YXlXYWxsZXRCYXRjaGVkIiwidmVyc2lvbiI6IjEiLCJ2ZXJpZnlpbmdDb250cmFjdCI6IjB4Nzc3Nzc3NzdEY2M0ZDVBOEI2RTQxOEZkMDREODk5N2VmMTEwMDBlRSJ9LCJtYXhUaW1lb3V0U2Vjb25kcyI6NjA0OTAwLCJwYXlUbyI6IjB4Y2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZCIsImFzc2V0IjoiMHgzNjAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIiwiYW1vdW50IjoiMTAwMDAwMCIsIm5ldHdvcmsiOiJlaXAxNTU6NTA0MiIsInNjaGVtZSI6ImV4YWN0In0sInBheWxvYWQiOnsiYXV0aG9yaXphdGlvbiI6eyJmcm9tIjoiMHgzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzIiwibm9uY2UiOiIweGFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWIifSwic2lnbmF0dXJlIjoiMHhjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkIn19"}",
+      "body": "{"resourceId":"resource-id","paymentRequirements":<<ARC_V2_ACCEPT>>,"paymentSignatureHeader":"eyJ4NDAyVmVyc2lvbiI6MiwiYWNjZXB0ZWQiOnsiZXh0cmEiOnsibmFtZSI6IkdhdGV3YXlXYWxsZXRCYXRjaGVkIiwidmVyc2lvbiI6IjEiLCJ2ZXJpZnlpbmdDb250cmFjdCI6IjB4Nzc3Nzc3NzdEY2M0ZDVBOEI2RTQxOEZkMDREODk5N2VmMTEwMDBlRSJ9LCJtYXhUaW1lb3V0U2Vjb25kcyI6NjA0OTAwLCJwYXlUbyI6IjB4Y2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZCIsImFzc2V0IjoiMHgzNjAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIiwiYW1vdW50IjoiMTAwMDAwMCIsIm5ldHdvcmsiOiJlaXAxNTU6NTA0MiIsInNjaGVtZSI6ImV4YWN0In0sInBheWxvYWQiOnsiYXV0aG9yaXphdGlvbiI6eyJmcm9tIjoiMHgzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzIiwidG8iOiIweGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2QiLCJ2YWx1ZSI6IjEwMDAwMDAiLCJ2YWxpZEFmdGVyIjoiMCIsInZhbGlkQmVmb3JlIjoiNDEwMjQ0NDgwMCIsIm5vbmNlIjoiMHgwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAyMDAxIn0sInNpZ25hdHVyZSI6IjB4Y2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZCJ9fQ=="}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -11538,7 +11538,7 @@ exports[`5b. USDC rail selection > Arc payment with the accepted terms in anothe
       "url": "https://open-pay.jp/api/x402/relay/verify",
     },
     {
-      "body": "{"resourceId":"resource-id","paymentRequirements":<<ARC_V2_ACCEPT>>,"paymentSignatureHeader":"eyJ4NDAyVmVyc2lvbiI6MiwiYWNjZXB0ZWQiOnsiZXh0cmEiOnsibmFtZSI6IkdhdGV3YXlXYWxsZXRCYXRjaGVkIiwidmVyc2lvbiI6IjEiLCJ2ZXJpZnlpbmdDb250cmFjdCI6IjB4Nzc3Nzc3NzdEY2M0ZDVBOEI2RTQxOEZkMDREODk5N2VmMTEwMDBlRSJ9LCJtYXhUaW1lb3V0U2Vjb25kcyI6NjA0OTAwLCJwYXlUbyI6IjB4Y2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZCIsImFzc2V0IjoiMHgzNjAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIiwiYW1vdW50IjoiMTAwMDAwMCIsIm5ldHdvcmsiOiJlaXAxNTU6NTA0MiIsInNjaGVtZSI6ImV4YWN0In0sInBheWxvYWQiOnsiYXV0aG9yaXphdGlvbiI6eyJmcm9tIjoiMHgzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzIiwibm9uY2UiOiIweGFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWIifSwic2lnbmF0dXJlIjoiMHhjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkIn19"}",
+      "body": "{"resourceId":"resource-id","paymentRequirements":<<ARC_V2_ACCEPT>>,"paymentSignatureHeader":"eyJ4NDAyVmVyc2lvbiI6MiwiYWNjZXB0ZWQiOnsiZXh0cmEiOnsibmFtZSI6IkdhdGV3YXlXYWxsZXRCYXRjaGVkIiwidmVyc2lvbiI6IjEiLCJ2ZXJpZnlpbmdDb250cmFjdCI6IjB4Nzc3Nzc3NzdEY2M0ZDVBOEI2RTQxOEZkMDREODk5N2VmMTEwMDBlRSJ9LCJtYXhUaW1lb3V0U2Vjb25kcyI6NjA0OTAwLCJwYXlUbyI6IjB4Y2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZCIsImFzc2V0IjoiMHgzNjAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIiwiYW1vdW50IjoiMTAwMDAwMCIsIm5ldHdvcmsiOiJlaXAxNTU6NTA0MiIsInNjaGVtZSI6ImV4YWN0In0sInBheWxvYWQiOnsiYXV0aG9yaXphdGlvbiI6eyJmcm9tIjoiMHgzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzIiwidG8iOiIweGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2QiLCJ2YWx1ZSI6IjEwMDAwMDAiLCJ2YWxpZEFmdGVyIjoiMCIsInZhbGlkQmVmb3JlIjoiNDEwMjQ0NDgwMCIsIm5vbmNlIjoiMHgwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAyMDAxIn0sInNpZ25hdHVyZSI6IjB4Y2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZCJ9fQ=="}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -11555,7 +11555,7 @@ exports[`5b. USDC rail selection > Arc payment with the accepted terms in anothe
     {
       "at": "+0:00.000",
       "headers": {
-        "PAYMENT-SIGNATURE": "eyJ4NDAyVmVyc2lvbiI6MiwiYWNjZXB0ZWQiOnsiZXh0cmEiOnsibmFtZSI6IkdhdGV3YXlXYWxsZXRCYXRjaGVkIiwidmVyc2lvbiI6IjEiLCJ2ZXJpZnlpbmdDb250cmFjdCI6IjB4Nzc3Nzc3NzdEY2M0ZDVBOEI2RTQxOEZkMDREODk5N2VmMTEwMDBlRSJ9LCJtYXhUaW1lb3V0U2Vjb25kcyI6NjA0OTAwLCJwYXlUbyI6IjB4Y2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZCIsImFzc2V0IjoiMHgzNjAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIiwiYW1vdW50IjoiMTAwMDAwMCIsIm5ldHdvcmsiOiJlaXAxNTU6NTA0MiIsInNjaGVtZSI6ImV4YWN0In0sInBheWxvYWQiOnsiYXV0aG9yaXphdGlvbiI6eyJmcm9tIjoiMHgzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzIiwibm9uY2UiOiIweGFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWIifSwic2lnbmF0dXJlIjoiMHhjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkIn19",
+        "PAYMENT-SIGNATURE": "eyJ4NDAyVmVyc2lvbiI6MiwiYWNjZXB0ZWQiOnsiZXh0cmEiOnsibmFtZSI6IkdhdGV3YXlXYWxsZXRCYXRjaGVkIiwidmVyc2lvbiI6IjEiLCJ2ZXJpZnlpbmdDb250cmFjdCI6IjB4Nzc3Nzc3NzdEY2M0ZDVBOEI2RTQxOEZkMDREODk5N2VmMTEwMDBlRSJ9LCJtYXhUaW1lb3V0U2Vjb25kcyI6NjA0OTAwLCJwYXlUbyI6IjB4Y2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZCIsImFzc2V0IjoiMHgzNjAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIiwiYW1vdW50IjoiMTAwMDAwMCIsIm5ldHdvcmsiOiJlaXAxNTU6NTA0MiIsInNjaGVtZSI6ImV4YWN0In0sInBheWxvYWQiOnsiYXV0aG9yaXphdGlvbiI6eyJmcm9tIjoiMHgzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzIiwidG8iOiIweGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2QiLCJ2YWx1ZSI6IjEwMDAwMDAiLCJ2YWxpZEFmdGVyIjoiMCIsInZhbGlkQmVmb3JlIjoiNDEwMjQ0NDgwMCIsIm5vbmNlIjoiMHgwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAyMDAxIn0sInNpZ25hdHVyZSI6IjB4Y2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZCJ9fQ==",
       },
       "label": "request",
       "response": {
@@ -11913,7 +11913,7 @@ exports[`6. status vs body > facilitatorSettle HTTP 202 with a failure-shaped bo
       "url": "https://open-pay.jp/api/discovery/resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -11926,7 +11926,7 @@ exports[`6. status vs body > facilitatorSettle HTTP 202 with a failure-shaped bo
       "url": "https://open-pay.jp/api/facilitator/verify",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -12004,7 +12004,7 @@ exports[`6. status vs body > facilitatorSettle HTTP 202 with a success-shaped bo
       "url": "https://open-pay.jp/api/discovery/resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -12017,7 +12017,7 @@ exports[`6. status vs body > facilitatorSettle HTTP 202 with a success-shaped bo
       "url": "https://open-pay.jp/api/facilitator/verify",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -12091,7 +12091,7 @@ exports[`6. status vs body > facilitatorSettle HTTP 400 with a failure-shaped bo
       "url": "https://open-pay.jp/api/discovery/resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -12104,7 +12104,7 @@ exports[`6. status vs body > facilitatorSettle HTTP 400 with a failure-shaped bo
       "url": "https://open-pay.jp/api/facilitator/verify",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -12173,7 +12173,7 @@ exports[`6. status vs body > facilitatorSettle HTTP 400 with a success-shaped bo
       "url": "https://open-pay.jp/api/discovery/resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -12186,7 +12186,7 @@ exports[`6. status vs body > facilitatorSettle HTTP 400 with a success-shaped bo
       "url": "https://open-pay.jp/api/facilitator/verify",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -12255,7 +12255,7 @@ exports[`6. status vs body > facilitatorSettle HTTP 429 with a failure-shaped bo
       "url": "https://open-pay.jp/api/discovery/resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -12268,7 +12268,7 @@ exports[`6. status vs body > facilitatorSettle HTTP 429 with a failure-shaped bo
       "url": "https://open-pay.jp/api/facilitator/verify",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -12337,7 +12337,7 @@ exports[`6. status vs body > facilitatorSettle HTTP 429 with a success-shaped bo
       "url": "https://open-pay.jp/api/discovery/resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -12350,7 +12350,7 @@ exports[`6. status vs body > facilitatorSettle HTTP 429 with a success-shaped bo
       "url": "https://open-pay.jp/api/facilitator/verify",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -12423,7 +12423,7 @@ exports[`6. status vs body > facilitatorSettle HTTP 500 with a failure-shaped bo
       "url": "https://open-pay.jp/api/discovery/resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -12436,7 +12436,7 @@ exports[`6. status vs body > facilitatorSettle HTTP 500 with a failure-shaped bo
       "url": "https://open-pay.jp/api/facilitator/verify",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -12510,7 +12510,7 @@ exports[`6. status vs body > facilitatorSettle HTTP 500 with a success-shaped bo
       "url": "https://open-pay.jp/api/discovery/resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -12523,7 +12523,7 @@ exports[`6. status vs body > facilitatorSettle HTTP 500 with a success-shaped bo
       "url": "https://open-pay.jp/api/facilitator/verify",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -12597,7 +12597,7 @@ exports[`6. status vs body > facilitatorSettle HTTP 503 with a failure-shaped bo
       "url": "https://open-pay.jp/api/discovery/resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -12610,7 +12610,7 @@ exports[`6. status vs body > facilitatorSettle HTTP 503 with a failure-shaped bo
       "url": "https://open-pay.jp/api/facilitator/verify",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -12684,7 +12684,7 @@ exports[`6. status vs body > facilitatorSettle HTTP 503 with a success-shaped bo
       "url": "https://open-pay.jp/api/discovery/resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -12697,7 +12697,7 @@ exports[`6. status vs body > facilitatorSettle HTTP 503 with a success-shaped bo
       "url": "https://open-pay.jp/api/facilitator/verify",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -12765,7 +12765,7 @@ exports[`6. status vs body > facilitatorVerify HTTP 202 with a failure-shaped bo
       "url": "https://open-pay.jp/api/discovery/resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -12830,7 +12830,7 @@ exports[`6. status vs body > facilitatorVerify HTTP 202 with a success-shaped bo
       "url": "https://open-pay.jp/api/discovery/resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -12891,7 +12891,7 @@ exports[`6. status vs body > facilitatorVerify HTTP 400 with a failure-shaped bo
       "url": "https://open-pay.jp/api/discovery/resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -12951,7 +12951,7 @@ exports[`6. status vs body > facilitatorVerify HTTP 400 with a success-shaped bo
       "url": "https://open-pay.jp/api/discovery/resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -13015,7 +13015,7 @@ exports[`6. status vs body > facilitatorVerify HTTP 429 with a failure-shaped bo
       "url": "https://open-pay.jp/api/discovery/resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -13080,7 +13080,7 @@ exports[`6. status vs body > facilitatorVerify HTTP 429 with a success-shaped bo
       "url": "https://open-pay.jp/api/discovery/resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -13145,7 +13145,7 @@ exports[`6. status vs body > facilitatorVerify HTTP 500 with a failure-shaped bo
       "url": "https://open-pay.jp/api/discovery/resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -13210,7 +13210,7 @@ exports[`6. status vs body > facilitatorVerify HTTP 500 with a success-shaped bo
       "url": "https://open-pay.jp/api/discovery/resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -13275,7 +13275,7 @@ exports[`6. status vs body > facilitatorVerify HTTP 503 with a failure-shaped bo
       "url": "https://open-pay.jp/api/discovery/resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -13340,7 +13340,7 @@ exports[`6. status vs body > facilitatorVerify HTTP 503 with a success-shaped bo
       "url": "https://open-pay.jp/api/discovery/resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -15121,7 +15121,7 @@ exports[`7. odd verify / settle bodies > JPYC settle body "ok" 1`] = `
       "url": "https://open-pay.jp/api/discovery/resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -15134,7 +15134,7 @@ exports[`7. odd verify / settle bodies > JPYC settle body "ok" 1`] = `
       "url": "https://open-pay.jp/api/facilitator/verify",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -15208,7 +15208,7 @@ exports[`7. odd verify / settle bodies > JPYC settle body [] 1`] = `
       "url": "https://open-pay.jp/api/discovery/resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -15221,7 +15221,7 @@ exports[`7. odd verify / settle bodies > JPYC settle body [] 1`] = `
       "url": "https://open-pay.jp/api/facilitator/verify",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -15295,7 +15295,7 @@ exports[`7. odd verify / settle bodies > JPYC settle body 42 1`] = `
       "url": "https://open-pay.jp/api/discovery/resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -15308,7 +15308,7 @@ exports[`7. odd verify / settle bodies > JPYC settle body 42 1`] = `
       "url": "https://open-pay.jp/api/facilitator/verify",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -15382,7 +15382,7 @@ exports[`7. odd verify / settle bodies > JPYC settle body true 1`] = `
       "url": "https://open-pay.jp/api/discovery/resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -15395,7 +15395,7 @@ exports[`7. odd verify / settle bodies > JPYC settle body true 1`] = `
       "url": "https://open-pay.jp/api/facilitator/verify",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -15465,7 +15465,7 @@ exports[`7. odd verify / settle bodies > JPYC settle errorReason "" 1`] = `
       "url": "https://open-pay.jp/api/discovery/resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -15478,7 +15478,7 @@ exports[`7. odd verify / settle bodies > JPYC settle errorReason "" 1`] = `
       "url": "https://open-pay.jp/api/facilitator/verify",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -15547,7 +15547,7 @@ exports[`7. odd verify / settle bodies > JPYC settle errorReason {"a":1} 1`] = `
       "url": "https://open-pay.jp/api/discovery/resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -15560,7 +15560,7 @@ exports[`7. odd verify / settle bodies > JPYC settle errorReason {"a":1} 1`] = `
       "url": "https://open-pay.jp/api/facilitator/verify",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -15629,7 +15629,7 @@ exports[`7. odd verify / settle bodies > JPYC settle errorReason 0 1`] = `
       "url": "https://open-pay.jp/api/discovery/resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -15642,7 +15642,7 @@ exports[`7. odd verify / settle bodies > JPYC settle errorReason 0 1`] = `
       "url": "https://open-pay.jp/api/facilitator/verify",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -15711,7 +15711,7 @@ exports[`7. odd verify / settle bodies > JPYC settle errorReason a 200-character
       "url": "https://open-pay.jp/api/discovery/resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -15724,7 +15724,7 @@ exports[`7. odd verify / settle bodies > JPYC settle errorReason a 200-character
       "url": "https://open-pay.jp/api/facilitator/verify",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -15793,7 +15793,7 @@ exports[`7. odd verify / settle bodies > JPYC settle errorReason false 1`] = `
       "url": "https://open-pay.jp/api/discovery/resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -15806,7 +15806,7 @@ exports[`7. odd verify / settle bodies > JPYC settle errorReason false 1`] = `
       "url": "https://open-pay.jp/api/facilitator/verify",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -15875,7 +15875,7 @@ exports[`7. odd verify / settle bodies > JPYC settle errorReason null 1`] = `
       "url": "https://open-pay.jp/api/discovery/resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -15888,7 +15888,7 @@ exports[`7. odd verify / settle bodies > JPYC settle errorReason null 1`] = `
       "url": "https://open-pay.jp/api/facilitator/verify",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -15955,7 +15955,7 @@ exports[`7. odd verify / settle bodies > JPYC verify body "ok" 1`] = `
       "url": "https://open-pay.jp/api/discovery/resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -16020,7 +16020,7 @@ exports[`7. odd verify / settle bodies > JPYC verify body [] 1`] = `
       "url": "https://open-pay.jp/api/discovery/resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -16085,7 +16085,7 @@ exports[`7. odd verify / settle bodies > JPYC verify body 42 1`] = `
       "url": "https://open-pay.jp/api/discovery/resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -16150,7 +16150,7 @@ exports[`7. odd verify / settle bodies > JPYC verify body true 1`] = `
       "url": "https://open-pay.jp/api/discovery/resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -16211,7 +16211,7 @@ exports[`7. odd verify / settle bodies > JPYC verify invalidReason "" 1`] = `
       "url": "https://open-pay.jp/api/discovery/resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -16271,7 +16271,7 @@ exports[`7. odd verify / settle bodies > JPYC verify invalidReason {"a":1} 1`] =
       "url": "https://open-pay.jp/api/discovery/resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -16331,7 +16331,7 @@ exports[`7. odd verify / settle bodies > JPYC verify invalidReason 0 1`] = `
       "url": "https://open-pay.jp/api/discovery/resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -16391,7 +16391,7 @@ exports[`7. odd verify / settle bodies > JPYC verify invalidReason a 200-charact
       "url": "https://open-pay.jp/api/discovery/resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -16451,7 +16451,7 @@ exports[`7. odd verify / settle bodies > JPYC verify invalidReason false 1`] = `
       "url": "https://open-pay.jp/api/discovery/resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -16511,7 +16511,7 @@ exports[`7. odd verify / settle bodies > JPYC verify invalidReason null 1`] = `
       "url": "https://open-pay.jp/api/discovery/resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -18464,7 +18464,7 @@ exports[`8. cache tiers > a paid refetch restarts the unpaid 30-minute window 1`
       "url": "https://open-pay.jp/api/x402/relay/requirements?resourceId=resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -18477,7 +18477,7 @@ exports[`8. cache tiers > a paid refetch restarts the unpaid 30-minute window 1`
       "url": "https://open-pay.jp/api/facilitator/verify",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -19334,7 +19334,7 @@ exports[`8. cache tiers > paid boundary (Arc v2): 4:59.999 cached, 5:00.000 refe
       "url": "https://open-pay.jp/api/x402/relay/requirements?resourceId=resource-id",
     },
     {
-      "body": "{"resourceId":"resource-id","paymentRequirements":<<ARC_V2_ACCEPT>>,"paymentSignatureHeader":"<<PAYMENT_SIGNATURE_ARC>>"}",
+      "body": "{"resourceId":"resource-id","paymentRequirements":<<ARC_V2_ACCEPT>>,"paymentSignatureHeader":"<<PAYMENT_SIGNATURE_ARC_2>>"}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -19347,7 +19347,7 @@ exports[`8. cache tiers > paid boundary (Arc v2): 4:59.999 cached, 5:00.000 refe
       "url": "https://open-pay.jp/api/x402/relay/verify",
     },
     {
-      "body": "{"resourceId":"resource-id","paymentRequirements":<<ARC_V2_ACCEPT>>,"paymentSignatureHeader":"<<PAYMENT_SIGNATURE_ARC>>"}",
+      "body": "{"resourceId":"resource-id","paymentRequirements":<<ARC_V2_ACCEPT>>,"paymentSignatureHeader":"<<PAYMENT_SIGNATURE_ARC_2>>"}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -19419,7 +19419,7 @@ exports[`8. cache tiers > paid boundary (Arc v2): 4:59.999 cached, 5:00.000 refe
     {
       "at": "+5:00.000",
       "headers": {
-        "PAYMENT-SIGNATURE": "<<PAYMENT_SIGNATURE_ARC>>",
+        "PAYMENT-SIGNATURE": "<<PAYMENT_SIGNATURE_ARC_2>>",
       },
       "label": "paid at 5:00.000",
       "response": {
@@ -19501,7 +19501,7 @@ exports[`8. cache tiers > paid boundary (JPYC): 4:59.999 cached, 5:00.000 refetc
       "url": "https://open-pay.jp/api/x402/relay/requirements?resourceId=resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -19514,7 +19514,7 @@ exports[`8. cache tiers > paid boundary (JPYC): 4:59.999 cached, 5:00.000 refetc
       "url": "https://open-pay.jp/api/facilitator/verify",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -19543,7 +19543,7 @@ exports[`8. cache tiers > paid boundary (JPYC): 4:59.999 cached, 5:00.000 refetc
       "url": "https://open-pay.jp/api/x402/relay/requirements?resourceId=resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT_2>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -19556,7 +19556,7 @@ exports[`8. cache tiers > paid boundary (JPYC): 4:59.999 cached, 5:00.000 refetc
       "url": "https://open-pay.jp/api/facilitator/verify",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT_2>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -19624,7 +19624,7 @@ exports[`8. cache tiers > paid boundary (JPYC): 4:59.999 cached, 5:00.000 refetc
     {
       "at": "+5:00.000",
       "headers": {
-        "X-PAYMENT": "<<X_PAYMENT_JPYC>>",
+        "X-PAYMENT": "<<X_PAYMENT_JPYC_2>>",
       },
       "label": "paid at 5:00.000",
       "response": {
@@ -19744,7 +19744,7 @@ exports[`8. cache tiers > paid boundary (USDC v1): 4:59.999 cached, 5:00.000 ref
       "url": "https://open-pay.jp/api/x402/relay/requirements?resourceId=resource-id",
     },
     {
-      "body": "{"resourceId":"resource-id","paymentRequirements":<<USDC_V1_ACCEPT>>,"paymentHeader":"<<X_PAYMENT_USDC_BASE>>"}",
+      "body": "{"resourceId":"resource-id","paymentRequirements":<<USDC_V1_ACCEPT>>,"paymentHeader":"<<X_PAYMENT_USDC_BASE_2>>"}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -19757,7 +19757,7 @@ exports[`8. cache tiers > paid boundary (USDC v1): 4:59.999 cached, 5:00.000 ref
       "url": "https://open-pay.jp/api/x402/relay/verify",
     },
     {
-      "body": "{"resourceId":"resource-id","paymentRequirements":<<USDC_V1_ACCEPT>>,"paymentHeader":"<<X_PAYMENT_USDC_BASE>>"}",
+      "body": "{"resourceId":"resource-id","paymentRequirements":<<USDC_V1_ACCEPT>>,"paymentHeader":"<<X_PAYMENT_USDC_BASE_2>>"}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -19825,7 +19825,7 @@ exports[`8. cache tiers > paid boundary (USDC v1): 4:59.999 cached, 5:00.000 ref
     {
       "at": "+5:00.000",
       "headers": {
-        "X-PAYMENT": "<<X_PAYMENT_USDC_BASE>>",
+        "X-PAYMENT": "<<X_PAYMENT_USDC_BASE_2>>",
       },
       "label": "paid at 5:00.000",
       "response": {
@@ -20106,7 +20106,7 @@ exports[`8. cache tiers > repriced listing: unpaid keeps the cached terms, paid 
       "url": "https://open-pay.jp/api/x402/relay/requirements?resourceId=resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":{"scheme":"exact","network":"eip155:137","maxAmountRequired":"2010000000000000000","resource":"https://gateway.example.com/api/consult?q=hello","description":"Consultation","mimeType":"application/json","payTo":"0x2222222222222222222222222222222222222222","asset":"0xE7C3e3dC199E8F12B5A0D0D62cD3E2D5b21A4c29","extra":{"openpay":{"mode":"forwarder-split","forwarder":"0x2222222222222222222222222222222222222222","merchant":"0xabababababababababababababababababababab","merchantValue":"2000000000000000000"}}}}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":{"scheme":"exact","network":"eip155:137","maxAmountRequired":"2010000000000000000","resource":"https://gateway.example.com/api/consult?q=hello","description":"Consultation","mimeType":"application/json","payTo":"0x0F4560a777415580F0680F8B56a79B0022C6B848","maxTimeoutSeconds":600,"asset":"0xE7C3D8C9a439feDe00D2600032D5dB0Be71C3c29","extra":{"openpay":{"mode":"forwarder-split","forwarder":"0x0F4560a777415580F0680F8B56a79B0022C6B848","merchant":"0xabababababababababababababababababababab","merchantValue":"2000000000000000000","feeReceiver":"0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee","feeValue":"10000000000000000"}}}}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -20119,7 +20119,7 @@ exports[`8. cache tiers > repriced listing: unpaid keeps the cached terms, paid 
       "url": "https://open-pay.jp/api/facilitator/verify",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":{"scheme":"exact","network":"eip155:137","maxAmountRequired":"2010000000000000000","resource":"https://gateway.example.com/api/consult?q=hello","description":"Consultation","mimeType":"application/json","payTo":"0x2222222222222222222222222222222222222222","asset":"0xE7C3e3dC199E8F12B5A0D0D62cD3E2D5b21A4c29","extra":{"openpay":{"mode":"forwarder-split","forwarder":"0x2222222222222222222222222222222222222222","merchant":"0xabababababababababababababababababababab","merchantValue":"2000000000000000000"}}}}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":{"scheme":"exact","network":"eip155:137","maxAmountRequired":"2010000000000000000","resource":"https://gateway.example.com/api/consult?q=hello","description":"Consultation","mimeType":"application/json","payTo":"0x0F4560a777415580F0680F8B56a79B0022C6B848","maxTimeoutSeconds":600,"asset":"0xE7C3D8C9a439feDe00D2600032D5dB0Be71C3c29","extra":{"openpay":{"mode":"forwarder-split","forwarder":"0x0F4560a777415580F0680F8B56a79B0022C6B848","merchant":"0xabababababababababababababababababababab","merchantValue":"2000000000000000000","feeReceiver":"0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee","feeValue":"10000000000000000"}}}}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -20212,7 +20212,7 @@ exports[`8. cache tiers > repriced listing: unpaid keeps the cached terms, paid 
       "at": "+10:00.000",
       "label": "unpaid after the payment",
       "response": {
-        "body": "{"x402Version":1,"accepts":[{"scheme":"exact","network":"eip155:137","maxAmountRequired":"2010000000000000000","resource":"https://gateway.example.com/api/consult?q=hello","description":"Consultation","mimeType":"application/json","payTo":"0x2222222222222222222222222222222222222222","asset":"0xE7C3e3dC199E8F12B5A0D0D62cD3E2D5b21A4c29","extra":{"openpay":{"mode":"forwarder-split","forwarder":"0x2222222222222222222222222222222222222222","merchant":"0xabababababababababababababababababababab","merchantValue":"2000000000000000000"}}},<<USDC_V1_ACCEPT>>],"error":"payment_required"}",
+        "body": "{"x402Version":1,"accepts":[{"scheme":"exact","network":"eip155:137","maxAmountRequired":"2010000000000000000","resource":"https://gateway.example.com/api/consult?q=hello","description":"Consultation","mimeType":"application/json","payTo":"0x0F4560a777415580F0680F8B56a79B0022C6B848","maxTimeoutSeconds":600,"asset":"0xE7C3D8C9a439feDe00D2600032D5dB0Be71C3c29","extra":{"openpay":{"mode":"forwarder-split","forwarder":"0x0F4560a777415580F0680F8B56a79B0022C6B848","merchant":"0xabababababababababababababababababababab","merchantValue":"2000000000000000000","feeReceiver":"0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee","feeValue":"10000000000000000"}}},<<USDC_V1_ACCEPT>>],"error":"payment_required"}",
         "headers": [
           [
             "cache-control",
@@ -20552,7 +20552,7 @@ exports[`8. cache tiers > two unpaid requests: one discovery and one requirement
       "at": "+0:00.000",
       "label": "second",
       "response": {
-        "body": "{"x402Version":1,"accepts":[{"scheme":"exact","network":"eip155:137","maxAmountRequired":"1010000000000000000","resource":"https://gateway.example.com/api/consult?q=again","description":"Consultation","mimeType":"application/json","payTo":"0x2222222222222222222222222222222222222222","asset":"0xE7C3e3dC199E8F12B5A0D0D62cD3E2D5b21A4c29","extra":{"openpay":{"mode":"forwarder-split","forwarder":"0x2222222222222222222222222222222222222222","merchant":"0xabababababababababababababababababababab","merchantValue":"1000000000000000000"}}},<<USDC_V1_ACCEPT>>],"error":"payment_required"}",
+        "body": "{"x402Version":1,"accepts":[{"scheme":"exact","network":"eip155:137","maxAmountRequired":"1010000000000000000","resource":"https://gateway.example.com/api/consult?q=again","description":"Consultation","mimeType":"application/json","payTo":"0x0F4560a777415580F0680F8B56a79B0022C6B848","maxTimeoutSeconds":600,"asset":"0xE7C3D8C9a439feDe00D2600032D5dB0Be71C3c29","extra":{"openpay":{"mode":"forwarder-split","forwarder":"0x0F4560a777415580F0680F8B56a79B0022C6B848","merchant":"0xabababababababababababababababababababab","merchantValue":"1000000000000000000","feeReceiver":"0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee","feeValue":"10000000000000000"}}},<<USDC_V1_ACCEPT>>],"error":"payment_required"}",
         "headers": [
           [
             "cache-control",
@@ -20863,7 +20863,7 @@ exports[`8. cache tiers > unpaid, then JPYC paid after 4 minutes (cached) and 6 
       "url": "https://open-pay.jp/api/x402/relay/requirements?resourceId=resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -20876,7 +20876,7 @@ exports[`8. cache tiers > unpaid, then JPYC paid after 4 minutes (cached) and 6 
       "url": "https://open-pay.jp/api/facilitator/verify",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -20905,7 +20905,7 @@ exports[`8. cache tiers > unpaid, then JPYC paid after 4 minutes (cached) and 6 
       "url": "https://open-pay.jp/api/x402/relay/requirements?resourceId=resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT_2>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -20918,7 +20918,7 @@ exports[`8. cache tiers > unpaid, then JPYC paid after 4 minutes (cached) and 6 
       "url": "https://open-pay.jp/api/facilitator/verify",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT_2>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -20986,7 +20986,7 @@ exports[`8. cache tiers > unpaid, then JPYC paid after 4 minutes (cached) and 6 
     {
       "at": "+6:00.000",
       "headers": {
-        "X-PAYMENT": "<<X_PAYMENT_JPYC>>",
+        "X-PAYMENT": "<<X_PAYMENT_JPYC_2>>",
       },
       "label": "paid at 6:00",
       "response": {
@@ -21106,7 +21106,7 @@ exports[`8. cache tiers > unpaid, then USDC v2 paid after 4 minutes (cached) and
       "url": "https://open-pay.jp/api/x402/relay/requirements?resourceId=resource-id",
     },
     {
-      "body": "{"resourceId":"resource-id","paymentRequirements":<<USDC_V1_ACCEPT>>,"paymentSignatureHeader":"<<PAYMENT_SIGNATURE_BASE>>"}",
+      "body": "{"resourceId":"resource-id","paymentRequirements":<<USDC_V1_ACCEPT>>,"paymentSignatureHeader":"<<PAYMENT_SIGNATURE_BASE_2>>"}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -21119,7 +21119,7 @@ exports[`8. cache tiers > unpaid, then USDC v2 paid after 4 minutes (cached) and
       "url": "https://open-pay.jp/api/x402/relay/verify",
     },
     {
-      "body": "{"resourceId":"resource-id","paymentRequirements":<<USDC_V1_ACCEPT>>,"paymentSignatureHeader":"<<PAYMENT_SIGNATURE_BASE>>"}",
+      "body": "{"resourceId":"resource-id","paymentRequirements":<<USDC_V1_ACCEPT>>,"paymentSignatureHeader":"<<PAYMENT_SIGNATURE_BASE_2>>"}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -21191,7 +21191,7 @@ exports[`8. cache tiers > unpaid, then USDC v2 paid after 4 minutes (cached) and
     {
       "at": "+6:00.000",
       "headers": {
-        "PAYMENT-SIGNATURE": "<<PAYMENT_SIGNATURE_BASE>>",
+        "PAYMENT-SIGNATURE": "<<PAYMENT_SIGNATURE_BASE_2>>",
       },
       "label": "paid at 6:00",
       "response": {
@@ -21800,7 +21800,7 @@ exports[`9. interleaved fetches > discovery: a paid read answering after 4:59.99
       "url": "https://open-pay.jp/api/discovery/resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -21813,7 +21813,7 @@ exports[`9. interleaved fetches > discovery: a paid read answering after 4:59.99
       "url": "https://open-pay.jp/api/facilitator/verify",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -21865,7 +21865,7 @@ exports[`9. interleaved fetches > discovery: a paid read answering after 4:59.99
     {
       "at": "+10:00.000",
       "headers": {
-        "X-PAYMENT": "<<X_PAYMENT_JPYC>>",
+        "X-PAYMENT": "<<X_PAYMENT_JPYC_2>>",
       },
       "label": "B paid at 10:00, discovery answers at 15:00.000",
       "response": {
@@ -21949,7 +21949,7 @@ exports[`9. interleaved fetches > discovery: a paid request overtaken while its 
       "url": "https://open-pay.jp/api/discovery/resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":{"scheme":"exact","network":"eip155:137","maxAmountRequired":"2010000000000000000","resource":"https://gateway.example.com/api/consult?q=hello","description":"Consultation","mimeType":"application/json","payTo":"0x2222222222222222222222222222222222222222","asset":"0xE7C3e3dC199E8F12B5A0D0D62cD3E2D5b21A4c29","extra":{"openpay":{"mode":"forwarder-split","forwarder":"0x2222222222222222222222222222222222222222","merchant":"0xabababababababababababababababababababab","merchantValue":"2000000000000000000"}}}}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":{"scheme":"exact","network":"eip155:137","maxAmountRequired":"2010000000000000000","resource":"https://gateway.example.com/api/consult?q=hello","description":"Consultation","mimeType":"application/json","payTo":"0x0F4560a777415580F0680F8B56a79B0022C6B848","maxTimeoutSeconds":600,"asset":"0xE7C3D8C9a439feDe00D2600032D5dB0Be71C3c29","extra":{"openpay":{"mode":"forwarder-split","forwarder":"0x0F4560a777415580F0680F8B56a79B0022C6B848","merchant":"0xabababababababababababababababababababab","merchantValue":"2000000000000000000","feeReceiver":"0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee","feeValue":"10000000000000000"}}}}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -21962,7 +21962,7 @@ exports[`9. interleaved fetches > discovery: a paid request overtaken while its 
       "url": "https://open-pay.jp/api/facilitator/verify",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":{"scheme":"exact","network":"eip155:137","maxAmountRequired":"2010000000000000000","resource":"https://gateway.example.com/api/consult?q=hello","description":"Consultation","mimeType":"application/json","payTo":"0x2222222222222222222222222222222222222222","asset":"0xE7C3e3dC199E8F12B5A0D0D62cD3E2D5b21A4c29","extra":{"openpay":{"mode":"forwarder-split","forwarder":"0x2222222222222222222222222222222222222222","merchant":"0xabababababababababababababababababababab","merchantValue":"2000000000000000000"}}}}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":{"scheme":"exact","network":"eip155:137","maxAmountRequired":"2010000000000000000","resource":"https://gateway.example.com/api/consult?q=hello","description":"Consultation","mimeType":"application/json","payTo":"0x0F4560a777415580F0680F8B56a79B0022C6B848","maxTimeoutSeconds":600,"asset":"0xE7C3D8C9a439feDe00D2600032D5dB0Be71C3c29","extra":{"openpay":{"mode":"forwarder-split","forwarder":"0x0F4560a777415580F0680F8B56a79B0022C6B848","merchant":"0xabababababababababababababababababababab","merchantValue":"2000000000000000000","feeReceiver":"0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee","feeValue":"10000000000000000"}}}}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -22007,7 +22007,7 @@ exports[`9. interleaved fetches > discovery: a paid request overtaken while its 
       "at": "+0:00.000",
       "label": "B unpaid (repriced terms answer first)",
       "response": {
-        "body": "{"x402Version":1,"accepts":[{"scheme":"exact","network":"eip155:137","maxAmountRequired":"2010000000000000000","resource":"https://gateway.example.com/api/consult?q=hello","description":"Consultation","mimeType":"application/json","payTo":"0x2222222222222222222222222222222222222222","asset":"0xE7C3e3dC199E8F12B5A0D0D62cD3E2D5b21A4c29","extra":{"openpay":{"mode":"forwarder-split","forwarder":"0x2222222222222222222222222222222222222222","merchant":"0xabababababababababababababababababababab","merchantValue":"2000000000000000000"}}}],"error":"payment_required"}",
+        "body": "{"x402Version":1,"accepts":[{"scheme":"exact","network":"eip155:137","maxAmountRequired":"2010000000000000000","resource":"https://gateway.example.com/api/consult?q=hello","description":"Consultation","mimeType":"application/json","payTo":"0x0F4560a777415580F0680F8B56a79B0022C6B848","maxTimeoutSeconds":600,"asset":"0xE7C3D8C9a439feDe00D2600032D5dB0Be71C3c29","extra":{"openpay":{"mode":"forwarder-split","forwarder":"0x0F4560a777415580F0680F8B56a79B0022C6B848","merchant":"0xabababababababababababababababababababab","merchantValue":"2000000000000000000","feeReceiver":"0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee","feeValue":"10000000000000000"}}}],"error":"payment_required"}",
         "headers": [
           [
             "cache-control",
@@ -22163,7 +22163,7 @@ exports[`9. interleaved fetches > discovery: an older success is overtaken by a 
       "at": "+0:00.000",
       "label": "A (discovery held, original terms)",
       "response": {
-        "body": "{"x402Version":1,"accepts":[{"scheme":"exact","network":"eip155:137","maxAmountRequired":"2010000000000000000","resource":"https://gateway.example.com/api/consult?q=hello","description":"Consultation","mimeType":"application/json","payTo":"0x2222222222222222222222222222222222222222","asset":"0xE7C3e3dC199E8F12B5A0D0D62cD3E2D5b21A4c29","extra":{"openpay":{"mode":"forwarder-split","forwarder":"0x2222222222222222222222222222222222222222","merchant":"0xabababababababababababababababababababab","merchantValue":"2000000000000000000"}}}],"error":"payment_required"}",
+        "body": "{"x402Version":1,"accepts":[{"scheme":"exact","network":"eip155:137","maxAmountRequired":"2010000000000000000","resource":"https://gateway.example.com/api/consult?q=hello","description":"Consultation","mimeType":"application/json","payTo":"0x0F4560a777415580F0680F8B56a79B0022C6B848","maxTimeoutSeconds":600,"asset":"0xE7C3D8C9a439feDe00D2600032D5dB0Be71C3c29","extra":{"openpay":{"mode":"forwarder-split","forwarder":"0x0F4560a777415580F0680F8B56a79B0022C6B848","merchant":"0xabababababababababababababababababababab","merchantValue":"2000000000000000000","feeReceiver":"0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee","feeValue":"10000000000000000"}}}],"error":"payment_required"}",
         "headers": [
           [
             "cache-control",
@@ -22183,7 +22183,7 @@ exports[`9. interleaved fetches > discovery: an older success is overtaken by a 
       "at": "+0:00.000",
       "label": "B (repriced terms answer first)",
       "response": {
-        "body": "{"x402Version":1,"accepts":[{"scheme":"exact","network":"eip155:137","maxAmountRequired":"2010000000000000000","resource":"https://gateway.example.com/api/consult?q=hello","description":"Consultation","mimeType":"application/json","payTo":"0x2222222222222222222222222222222222222222","asset":"0xE7C3e3dC199E8F12B5A0D0D62cD3E2D5b21A4c29","extra":{"openpay":{"mode":"forwarder-split","forwarder":"0x2222222222222222222222222222222222222222","merchant":"0xabababababababababababababababababababab","merchantValue":"2000000000000000000"}}}],"error":"payment_required"}",
+        "body": "{"x402Version":1,"accepts":[{"scheme":"exact","network":"eip155:137","maxAmountRequired":"2010000000000000000","resource":"https://gateway.example.com/api/consult?q=hello","description":"Consultation","mimeType":"application/json","payTo":"0x0F4560a777415580F0680F8B56a79B0022C6B848","maxTimeoutSeconds":600,"asset":"0xE7C3D8C9a439feDe00D2600032D5dB0Be71C3c29","extra":{"openpay":{"mode":"forwarder-split","forwarder":"0x0F4560a777415580F0680F8B56a79B0022C6B848","merchant":"0xabababababababababababababababababababab","merchantValue":"2000000000000000000","feeReceiver":"0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee","feeValue":"10000000000000000"}}}],"error":"payment_required"}",
         "headers": [
           [
             "cache-control",
@@ -22203,7 +22203,7 @@ exports[`9. interleaved fetches > discovery: an older success is overtaken by a 
       "at": "+0:00.000",
       "label": "C afterwards",
       "response": {
-        "body": "{"x402Version":1,"accepts":[{"scheme":"exact","network":"eip155:137","maxAmountRequired":"2010000000000000000","resource":"https://gateway.example.com/api/consult?q=hello","description":"Consultation","mimeType":"application/json","payTo":"0x2222222222222222222222222222222222222222","asset":"0xE7C3e3dC199E8F12B5A0D0D62cD3E2D5b21A4c29","extra":{"openpay":{"mode":"forwarder-split","forwarder":"0x2222222222222222222222222222222222222222","merchant":"0xabababababababababababababababababababab","merchantValue":"2000000000000000000"}}}],"error":"payment_required"}",
+        "body": "{"x402Version":1,"accepts":[{"scheme":"exact","network":"eip155:137","maxAmountRequired":"2010000000000000000","resource":"https://gateway.example.com/api/consult?q=hello","description":"Consultation","mimeType":"application/json","payTo":"0x0F4560a777415580F0680F8B56a79B0022C6B848","maxTimeoutSeconds":600,"asset":"0xE7C3D8C9a439feDe00D2600032D5dB0Be71C3c29","extra":{"openpay":{"mode":"forwarder-split","forwarder":"0x0F4560a777415580F0680F8B56a79B0022C6B848","merchant":"0xabababababababababababababababababababab","merchantValue":"2000000000000000000","feeReceiver":"0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee","feeValue":"10000000000000000"}}}],"error":"payment_required"}",
         "headers": [
           [
             "cache-control",
@@ -22359,7 +22359,7 @@ exports[`9. interleaved fetches > discovery: the older request re-checks a newer
       "at": "+0:00.000",
       "label": "B (EXPECTED_RECIPIENT changed, its listing answers first)",
       "response": {
-        "body": "{"x402Version":1,"accepts":[{"scheme":"exact","network":"eip155:137","maxAmountRequired":"1010000000000000000","resource":"https://gateway.example.com/api/consult?q=hello","description":"Consultation","mimeType":"application/json","payTo":"0x2222222222222222222222222222222222222222","asset":"0xE7C3e3dC199E8F12B5A0D0D62cD3E2D5b21A4c29","extra":{"openpay":{"mode":"forwarder-split","forwarder":"0x2222222222222222222222222222222222222222","merchant":"0x1111111111111111111111111111111111111111","merchantValue":"1000000000000000000"}}}],"error":"payment_required"}",
+        "body": "{"x402Version":1,"accepts":[{"scheme":"exact","network":"eip155:137","maxAmountRequired":"1010000000000000000","resource":"https://gateway.example.com/api/consult?q=hello","description":"Consultation","mimeType":"application/json","payTo":"0x0F4560a777415580F0680F8B56a79B0022C6B848","maxTimeoutSeconds":600,"asset":"0xE7C3D8C9a439feDe00D2600032D5dB0Be71C3c29","extra":{"openpay":{"mode":"forwarder-split","forwarder":"0x0F4560a777415580F0680F8B56a79B0022C6B848","merchant":"0x1111111111111111111111111111111111111111","merchantValue":"1000000000000000000","feeReceiver":"0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee","feeValue":"10000000000000000"}}}],"error":"payment_required"}",
         "headers": [
           [
             "cache-control",
@@ -22607,7 +22607,7 @@ exports[`9. interleaved fetches > requirements: a paid read answering after 4:59
     {
       "at": "+10:00.000",
       "headers": {
-        "PAYMENT-SIGNATURE": "<<PAYMENT_SIGNATURE_BASE>>",
+        "PAYMENT-SIGNATURE": "<<PAYMENT_SIGNATURE_BASE_2>>",
       },
       "label": "B paid at 10:00, requirements answer at 15:00.000",
       "response": {
@@ -23389,7 +23389,7 @@ exports[`10. consult configuration > MY_RESOURCE_URL with its own query, paid JP
       "url": "https://open-pay.jp/api/discovery/resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -23402,7 +23402,7 @@ exports[`10. consult configuration > MY_RESOURCE_URL with its own query, paid JP
       "url": "https://open-pay.jp/api/facilitator/verify",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -26183,7 +26183,7 @@ exports[`13. settle pending (202) > JPYC: 202 with JSON null 1`] = `
       "url": "https://open-pay.jp/api/discovery/resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -26196,7 +26196,7 @@ exports[`13. settle pending (202) > JPYC: 202 with JSON null 1`] = `
       "url": "https://open-pay.jp/api/facilitator/verify",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -26270,7 +26270,7 @@ exports[`13. settle pending (202) > JPYC: 202 with a non-JSON body 1`] = `
       "url": "https://open-pay.jp/api/discovery/resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -26283,7 +26283,7 @@ exports[`13. settle pending (202) > JPYC: 202 with a non-JSON body 1`] = `
       "url": "https://open-pay.jp/api/facilitator/verify",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -26357,7 +26357,7 @@ exports[`13. settle pending (202) > JPYC: pending body 1`] = `
       "url": "https://open-pay.jp/api/discovery/resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -26370,7 +26370,7 @@ exports[`13. settle pending (202) > JPYC: pending body 1`] = `
       "url": "https://open-pay.jp/api/facilitator/verify",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -27328,7 +27328,7 @@ exports[`14. reading verify / settle answers > JPYC: settle 200 reverted 1`] = `
       "url": "https://open-pay.jp/api/discovery/resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -27341,7 +27341,7 @@ exports[`14. reading verify / settle answers > JPYC: settle 200 reverted 1`] = `
       "url": "https://open-pay.jp/api/facilitator/verify",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -27414,7 +27414,7 @@ exports[`14. reading verify / settle answers > JPYC: settle 200 with an empty ob
       "url": "https://open-pay.jp/api/discovery/resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -27427,7 +27427,7 @@ exports[`14. reading verify / settle answers > JPYC: settle 200 with an empty ob
       "url": "https://open-pay.jp/api/facilitator/verify",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -27501,7 +27501,7 @@ exports[`14. reading verify / settle answers > JPYC: settle 200 with success "tr
       "url": "https://open-pay.jp/api/discovery/resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -27514,7 +27514,7 @@ exports[`14. reading verify / settle answers > JPYC: settle 200 with success "tr
       "url": "https://open-pay.jp/api/facilitator/verify",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -27588,7 +27588,7 @@ exports[`14. reading verify / settle answers > JPYC: settle 201 1`] = `
       "url": "https://open-pay.jp/api/discovery/resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -27601,7 +27601,7 @@ exports[`14. reading verify / settle answers > JPYC: settle 201 1`] = `
       "url": "https://open-pay.jp/api/facilitator/verify",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -27671,7 +27671,7 @@ exports[`14. reading verify / settle answers > JPYC: settle 400 with error code 
       "url": "https://open-pay.jp/api/discovery/resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -27684,7 +27684,7 @@ exports[`14. reading verify / settle answers > JPYC: settle 400 with error code 
       "url": "https://open-pay.jp/api/facilitator/verify",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -27753,7 +27753,7 @@ exports[`14. reading verify / settle answers > JPYC: settle 413 with a non-JSON 
       "url": "https://open-pay.jp/api/discovery/resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -27766,7 +27766,7 @@ exports[`14. reading verify / settle answers > JPYC: settle 413 with a non-JSON 
       "url": "https://open-pay.jp/api/facilitator/verify",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -27829,7 +27829,7 @@ exports[`14. reading verify / settle answers > JPYC: verify 200 with an empty ob
       "url": "https://open-pay.jp/api/discovery/resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -27889,7 +27889,7 @@ exports[`14. reading verify / settle answers > JPYC: verify 200 with isValid "tr
       "url": "https://open-pay.jp/api/discovery/resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -27953,7 +27953,7 @@ exports[`14. reading verify / settle answers > JPYC: verify 201 1`] = `
       "url": "https://open-pay.jp/api/discovery/resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -28014,7 +28014,7 @@ exports[`14. reading verify / settle answers > JPYC: verify 400 with a sentence 
       "url": "https://open-pay.jp/api/discovery/resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -28074,7 +28074,7 @@ exports[`14. reading verify / settle answers > JPYC: verify 400 with error code 
       "url": "https://open-pay.jp/api/discovery/resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -28134,7 +28134,7 @@ exports[`14. reading verify / settle answers > JPYC: verify 404 with error code 
       "url": "https://open-pay.jp/api/discovery/resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -28194,7 +28194,7 @@ exports[`14. reading verify / settle answers > JPYC: verify 413 with a non-JSON 
       "url": "https://open-pay.jp/api/discovery/resource-id",
     },
     {
-      "body": "{"x402Version":1,"paymentPayload":{"authorization":"payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
+      "body": "{"x402Version":1,"paymentPayload":<<JPYC_PAYMENT>>,"paymentRequirements":<<JPYC_ACCEPT>>}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -30413,16 +30413,22 @@ exports[`14. reading verify / settle answers > USDC Base v2: verify 413 with a n
 exports[`legend of the <<NAME>> placeholders used in the snapshots 1`] = `
 {
   "ARC_V2_ACCEPT": "{"scheme":"exact","network":"eip155:5042","amount":"1000000","asset":"0x3600000000000000000000000000000000000000","payTo":"0xcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd","maxTimeoutSeconds":604900,"extra":{"name":"GatewayWalletBatched","version":"1","verifyingContract":"0x77777777Dcc4d5A8B6E418Fd04D8997ef11000eE"}}",
-  "JPYC_ACCEPT": "{"scheme":"exact","network":"eip155:137","maxAmountRequired":"1010000000000000000","resource":"https://gateway.example.com/api/consult?q=hello","description":"Consultation","mimeType":"application/json","payTo":"0x2222222222222222222222222222222222222222","asset":"0xE7C3e3dC199E8F12B5A0D0D62cD3E2D5b21A4c29","extra":{"openpay":{"mode":"forwarder-split","forwarder":"0x2222222222222222222222222222222222222222","merchant":"0xabababababababababababababababababababab","merchantValue":"1000000000000000000"}}}",
+  "JPYC_ACCEPT": "{"scheme":"exact","network":"eip155:137","maxAmountRequired":"1010000000000000000","resource":"https://gateway.example.com/api/consult?q=hello","description":"Consultation","mimeType":"application/json","payTo":"0x0F4560a777415580F0680F8B56a79B0022C6B848","maxTimeoutSeconds":600,"asset":"0xE7C3D8C9a439feDe00D2600032D5dB0Be71C3c29","extra":{"openpay":{"mode":"forwarder-split","forwarder":"0x0F4560a777415580F0680F8B56a79B0022C6B848","merchant":"0xabababababababababababababababababababab","merchantValue":"1000000000000000000","feeReceiver":"0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee","feeValue":"10000000000000000"}}}",
+  "JPYC_PAYMENT": "{"x402Version":1,"scheme":"exact","network":"eip155:137","payload":{"signature":"0xcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd","authorization":{"from":"0x3333333333333333333333333333333333333333","validAfter":"0","validBefore":"4102444800","intentSalt":"0x0000000000000000000000000000000000000000000000000000000000000001"}}}",
+  "JPYC_PAYMENT_2": "{"x402Version":1,"scheme":"exact","network":"eip155:137","payload":{"signature":"0xcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd","authorization":{"from":"0x3333333333333333333333333333333333333333","validAfter":"0","validBefore":"4102444800","intentSalt":"0x0000000000000000000000000000000000000000000000000000000000000002"}}}",
   "PAYMENT_REQUIRED_BASE": "eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly9nYXRld2F5LmV4YW1wbGUuY29tL2FwaS9jb25zdWx0In0sImFjY2VwdHMiOlt7InNjaGVtZSI6ImV4YWN0IiwibmV0d29yayI6ImVpcDE1NTo4NDUzIiwiYW1vdW50IjoiMTAwMDAwMCIsInBheVRvIjoiMHhjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkIiwiYXNzZXQiOiIweDgzMzU4OWZDRDZlRGI2RTA4ZjRjN0MzMkQ0ZjcxYjU0YmRBMDI5MTMiLCJtYXhUaW1lb3V0U2Vjb25kcyI6MzAwLCJleHRyYSI6eyJuYW1lIjoiVVNEQyIsInZlcnNpb24iOiIyIn19XX0=",
   "PAYMENT_REQUIRED_BASE_ARC": "eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly9nYXRld2F5LmV4YW1wbGUuY29tL2FwaS9jb25zdWx0In0sImFjY2VwdHMiOlt7InNjaGVtZSI6ImV4YWN0IiwibmV0d29yayI6ImVpcDE1NTo4NDUzIiwiYW1vdW50IjoiMTAwMDAwMCIsInBheVRvIjoiMHhjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkIiwiYXNzZXQiOiIweDgzMzU4OWZDRDZlRGI2RTA4ZjRjN0MzMkQ0ZjcxYjU0YmRBMDI5MTMiLCJtYXhUaW1lb3V0U2Vjb25kcyI6MzAwLCJleHRyYSI6eyJuYW1lIjoiVVNEQyIsInZlcnNpb24iOiIyIn19LHsic2NoZW1lIjoiZXhhY3QiLCJuZXR3b3JrIjoiZWlwMTU1OjUwNDIiLCJhbW91bnQiOiIxMDAwMDAwIiwiYXNzZXQiOiIweDM2MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAiLCJwYXlUbyI6IjB4Y2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZCIsIm1heFRpbWVvdXRTZWNvbmRzIjo2MDQ5MDAsImV4dHJhIjp7Im5hbWUiOiJHYXRld2F5V2FsbGV0QmF0Y2hlZCIsInZlcnNpb24iOiIxIiwidmVyaWZ5aW5nQ29udHJhY3QiOiIweDc3Nzc3Nzc3RGNjNGQ1QThCNkU0MThGZDA0RDg5OTdlZjExMDAwZUUifX1dfQ==",
   "PAYMENT_REQUIRED_BASE_ARC_REPRICED": "eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly9nYXRld2F5LmV4YW1wbGUuY29tL2FwaS9jb25zdWx0In0sImFjY2VwdHMiOlt7InNjaGVtZSI6ImV4YWN0IiwibmV0d29yayI6ImVpcDE1NTo4NDUzIiwiYW1vdW50IjoiMjAwMDAwMCIsInBheVRvIjoiMHhjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkIiwiYXNzZXQiOiIweDgzMzU4OWZDRDZlRGI2RTA4ZjRjN0MzMkQ0ZjcxYjU0YmRBMDI5MTMiLCJtYXhUaW1lb3V0U2Vjb25kcyI6MzAwLCJleHRyYSI6eyJuYW1lIjoiVVNEQyIsInZlcnNpb24iOiIyIn19LHsic2NoZW1lIjoiZXhhY3QiLCJuZXR3b3JrIjoiZWlwMTU1OjUwNDIiLCJhbW91bnQiOiIyMDAwMDAwIiwiYXNzZXQiOiIweDM2MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAiLCJwYXlUbyI6IjB4Y2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZCIsIm1heFRpbWVvdXRTZWNvbmRzIjo2MDQ5MDAsImV4dHJhIjp7Im5hbWUiOiJHYXRld2F5V2FsbGV0QmF0Y2hlZCIsInZlcnNpb24iOiIxIiwidmVyaWZ5aW5nQ29udHJhY3QiOiIweDc3Nzc3Nzc3RGNjNGQ1QThCNkU0MThGZDA0RDg5OTdlZjExMDAwZUUifX1dfQ==",
   "PAYMENT_REQUIRED_BASE_REPRICED": "eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly9nYXRld2F5LmV4YW1wbGUuY29tL2FwaS9jb25zdWx0In0sImFjY2VwdHMiOlt7InNjaGVtZSI6ImV4YWN0IiwibmV0d29yayI6ImVpcDE1NTo4NDUzIiwiYW1vdW50IjoiMjAwMDAwMCIsInBheVRvIjoiMHhjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkIiwiYXNzZXQiOiIweDgzMzU4OWZDRDZlRGI2RTA4ZjRjN0MzMkQ0ZjcxYjU0YmRBMDI5MTMiLCJtYXhUaW1lb3V0U2Vjb25kcyI6MzAwLCJleHRyYSI6eyJuYW1lIjoiVVNEQyIsInZlcnNpb24iOiIyIn19XX0=",
-  "PAYMENT_SIGNATURE_ARC": "eyJ4NDAyVmVyc2lvbiI6MiwiYWNjZXB0ZWQiOnsic2NoZW1lIjoiZXhhY3QiLCJuZXR3b3JrIjoiZWlwMTU1OjUwNDIiLCJhbW91bnQiOiIxMDAwMDAwIiwiYXNzZXQiOiIweDM2MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAiLCJwYXlUbyI6IjB4Y2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZCIsIm1heFRpbWVvdXRTZWNvbmRzIjo2MDQ5MDAsImV4dHJhIjp7Im5hbWUiOiJHYXRld2F5V2FsbGV0QmF0Y2hlZCIsInZlcnNpb24iOiIxIiwidmVyaWZ5aW5nQ29udHJhY3QiOiIweDc3Nzc3Nzc3RGNjNGQ1QThCNkU0MThGZDA0RDg5OTdlZjExMDAwZUUifX0sInBheWxvYWQiOnsiYXV0aG9yaXphdGlvbiI6eyJmcm9tIjoiMHgzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzIiwibm9uY2UiOiIweGFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWIifSwic2lnbmF0dXJlIjoiMHhjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkIn19",
-  "PAYMENT_SIGNATURE_BASE": "eyJ4NDAyVmVyc2lvbiI6MiwiYWNjZXB0ZWQiOnsic2NoZW1lIjoiZXhhY3QiLCJuZXR3b3JrIjoiZWlwMTU1Ojg0NTMiLCJhbW91bnQiOiIxMDAwMDAwIiwicGF5VG8iOiIweGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2QiLCJhc3NldCI6IjB4ODMzNTg5ZkNENmVEYjZFMDhmNGM3QzMyRDRmNzFiNTRiZEEwMjkxMyIsIm1heFRpbWVvdXRTZWNvbmRzIjozMDAsImV4dHJhIjp7Im5hbWUiOiJVU0RDIiwidmVyc2lvbiI6IjIifX0sInBheWxvYWQiOnsiYXV0aG9yaXphdGlvbiI6eyJmcm9tIjoiMHgzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzIiwibm9uY2UiOiIweGFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWIifSwic2lnbmF0dXJlIjoiMHhjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkIn19",
+  "PAYMENT_SIGNATURE_ARC": "eyJ4NDAyVmVyc2lvbiI6MiwiYWNjZXB0ZWQiOnsic2NoZW1lIjoiZXhhY3QiLCJuZXR3b3JrIjoiZWlwMTU1OjUwNDIiLCJhbW91bnQiOiIxMDAwMDAwIiwiYXNzZXQiOiIweDM2MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAiLCJwYXlUbyI6IjB4Y2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZCIsIm1heFRpbWVvdXRTZWNvbmRzIjo2MDQ5MDAsImV4dHJhIjp7Im5hbWUiOiJHYXRld2F5V2FsbGV0QmF0Y2hlZCIsInZlcnNpb24iOiIxIiwidmVyaWZ5aW5nQ29udHJhY3QiOiIweDc3Nzc3Nzc3RGNjNGQ1QThCNkU0MThGZDA0RDg5OTdlZjExMDAwZUUifX0sInBheWxvYWQiOnsiYXV0aG9yaXphdGlvbiI6eyJmcm9tIjoiMHgzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzIiwidG8iOiIweGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2QiLCJ2YWx1ZSI6IjEwMDAwMDAiLCJ2YWxpZEFmdGVyIjoiMCIsInZhbGlkQmVmb3JlIjoiNDEwMjQ0NDgwMCIsIm5vbmNlIjoiMHgwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAyMDAxIn0sInNpZ25hdHVyZSI6IjB4Y2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZCJ9fQ==",
+  "PAYMENT_SIGNATURE_ARC_2": "eyJ4NDAyVmVyc2lvbiI6MiwiYWNjZXB0ZWQiOnsic2NoZW1lIjoiZXhhY3QiLCJuZXR3b3JrIjoiZWlwMTU1OjUwNDIiLCJhbW91bnQiOiIxMDAwMDAwIiwiYXNzZXQiOiIweDM2MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAiLCJwYXlUbyI6IjB4Y2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZCIsIm1heFRpbWVvdXRTZWNvbmRzIjo2MDQ5MDAsImV4dHJhIjp7Im5hbWUiOiJHYXRld2F5V2FsbGV0QmF0Y2hlZCIsInZlcnNpb24iOiIxIiwidmVyaWZ5aW5nQ29udHJhY3QiOiIweDc3Nzc3Nzc3RGNjNGQ1QThCNkU0MThGZDA0RDg5OTdlZjExMDAwZUUifX0sInBheWxvYWQiOnsiYXV0aG9yaXphdGlvbiI6eyJmcm9tIjoiMHgzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzIiwidG8iOiIweGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2QiLCJ2YWx1ZSI6IjEwMDAwMDAiLCJ2YWxpZEFmdGVyIjoiMCIsInZhbGlkQmVmb3JlIjoiNDEwMjQ0NDgwMCIsIm5vbmNlIjoiMHgwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAyMDAyIn0sInNpZ25hdHVyZSI6IjB4Y2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZCJ9fQ==",
+  "PAYMENT_SIGNATURE_BASE": "eyJ4NDAyVmVyc2lvbiI6MiwiYWNjZXB0ZWQiOnsic2NoZW1lIjoiZXhhY3QiLCJuZXR3b3JrIjoiZWlwMTU1Ojg0NTMiLCJhbW91bnQiOiIxMDAwMDAwIiwicGF5VG8iOiIweGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2QiLCJhc3NldCI6IjB4ODMzNTg5ZkNENmVEYjZFMDhmNGM3QzMyRDRmNzFiNTRiZEEwMjkxMyIsIm1heFRpbWVvdXRTZWNvbmRzIjozMDAsImV4dHJhIjp7Im5hbWUiOiJVU0RDIiwidmVyc2lvbiI6IjIifX0sInBheWxvYWQiOnsiYXV0aG9yaXphdGlvbiI6eyJmcm9tIjoiMHgzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzIiwidG8iOiIweGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2QiLCJ2YWx1ZSI6IjEwMDAwMDAiLCJ2YWxpZEFmdGVyIjoiMCIsInZhbGlkQmVmb3JlIjoiNDEwMjQ0NDgwMCIsIm5vbmNlIjoiMHgwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAyMDAxIn0sInNpZ25hdHVyZSI6IjB4Y2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZCJ9fQ==",
+  "PAYMENT_SIGNATURE_BASE_2": "eyJ4NDAyVmVyc2lvbiI6MiwiYWNjZXB0ZWQiOnsic2NoZW1lIjoiZXhhY3QiLCJuZXR3b3JrIjoiZWlwMTU1Ojg0NTMiLCJhbW91bnQiOiIxMDAwMDAwIiwicGF5VG8iOiIweGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2QiLCJhc3NldCI6IjB4ODMzNTg5ZkNENmVEYjZFMDhmNGM3QzMyRDRmNzFiNTRiZEEwMjkxMyIsIm1heFRpbWVvdXRTZWNvbmRzIjozMDAsImV4dHJhIjp7Im5hbWUiOiJVU0RDIiwidmVyc2lvbiI6IjIifX0sInBheWxvYWQiOnsiYXV0aG9yaXphdGlvbiI6eyJmcm9tIjoiMHgzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzIiwidG8iOiIweGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2QiLCJ2YWx1ZSI6IjEwMDAwMDAiLCJ2YWxpZEFmdGVyIjoiMCIsInZhbGlkQmVmb3JlIjoiNDEwMjQ0NDgwMCIsIm5vbmNlIjoiMHgwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAyMDAyIn0sInNpZ25hdHVyZSI6IjB4Y2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZCJ9fQ==",
   "USDC_V1_ACCEPT": "{"scheme":"exact","network":"base","maxAmountRequired":"1000000","resource":"https://gateway.example.com/api/consult","description":"Consultation","mimeType":"application/json","payTo":"0xcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd","maxTimeoutSeconds":300,"asset":"0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913","extra":{"name":"USDC","version":"2"}}",
   "USDC_V1_ACCEPT_REPRICED": "{"scheme":"exact","network":"base","maxAmountRequired":"2000000","resource":"https://gateway.example.com/api/consult","description":"Consultation","mimeType":"application/json","payTo":"0xcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd","maxTimeoutSeconds":300,"asset":"0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913","extra":{"name":"USDC","version":"2"}}",
-  "X_PAYMENT_JPYC": "eyJhdXRob3JpemF0aW9uIjoicGF5bWVudCJ9",
-  "X_PAYMENT_USDC_BASE": "eyJuZXR3b3JrIjoiYmFzZSIsImF1dGhvcml6YXRpb24iOiJ1c2RjLXBheW1lbnQifQ==",
+  "X_PAYMENT_JPYC": "eyJ4NDAyVmVyc2lvbiI6MSwic2NoZW1lIjoiZXhhY3QiLCJuZXR3b3JrIjoiZWlwMTU1OjEzNyIsInBheWxvYWQiOnsic2lnbmF0dXJlIjoiMHhjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkIiwiYXV0aG9yaXphdGlvbiI6eyJmcm9tIjoiMHgzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzIiwidmFsaWRBZnRlciI6IjAiLCJ2YWxpZEJlZm9yZSI6IjQxMDI0NDQ4MDAiLCJpbnRlbnRTYWx0IjoiMHgwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAxIn19fQ==",
+  "X_PAYMENT_JPYC_2": "eyJ4NDAyVmVyc2lvbiI6MSwic2NoZW1lIjoiZXhhY3QiLCJuZXR3b3JrIjoiZWlwMTU1OjEzNyIsInBheWxvYWQiOnsic2lnbmF0dXJlIjoiMHhjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkIiwiYXV0aG9yaXphdGlvbiI6eyJmcm9tIjoiMHgzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzIiwidmFsaWRBZnRlciI6IjAiLCJ2YWxpZEJlZm9yZSI6IjQxMDI0NDQ4MDAiLCJpbnRlbnRTYWx0IjoiMHgwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAyIn19fQ==",
+  "X_PAYMENT_USDC_BASE": "eyJ4NDAyVmVyc2lvbiI6MSwic2NoZW1lIjoiZXhhY3QiLCJuZXR3b3JrIjoiYmFzZSIsInBheWxvYWQiOnsic2lnbmF0dXJlIjoiMHhjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkIiwiYXV0aG9yaXphdGlvbiI6eyJmcm9tIjoiMHgzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzIiwidG8iOiIweGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2QiLCJ2YWx1ZSI6IjEwMDAwMDAiLCJ2YWxpZEFmdGVyIjoiMCIsInZhbGlkQmVmb3JlIjoiNDEwMjQ0NDgwMCIsIm5vbmNlIjoiMHgwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAxMDAxIn19fQ==",
+  "X_PAYMENT_USDC_BASE_2": "eyJ4NDAyVmVyc2lvbiI6MSwic2NoZW1lIjoiZXhhY3QiLCJuZXR3b3JrIjoiYmFzZSIsInBheWxvYWQiOnsic2lnbmF0dXJlIjoiMHhjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkIiwiYXV0aG9yaXphdGlvbiI6eyJmcm9tIjoiMHgzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzIiwidG8iOiIweGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2QiLCJ2YWx1ZSI6IjEwMDAwMDAiLCJ2YWxpZEFmdGVyIjoiMCIsInZhbGlkQmVmb3JlIjoiNDEwMjQ0NDgwMCIsIm5vbmNlIjoiMHgwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAxMDAyIn19fQ==",
 }
 `;
