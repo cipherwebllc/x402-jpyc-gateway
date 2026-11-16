@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { Adapter } from '@/lib/adapters/types';
 import { selectedAdapter } from '@/lib/adapters';
+import { resetClaims } from '@/lib/claims';
 import { resetAcceptsCache } from '@/lib/listing';
 import { resetArcProblemLog, resetUsdcFaceCache } from '@/lib/usdcFace';
 
@@ -16,6 +17,7 @@ import {
   catalogAccept, listing, paymentPayload, paymentHeader,
   paymentRequiredHeader, usdcAccept, usdcFace, v2Accept, response,
   arcV2Accept, arcHeaderFor, arcPaymentRequiredHeader, usdcFaceWithArc, paymentSignatureFor,
+  jpycPayment, jpycPaymentHeader, usdcAuthorization, usdcV1PaymentHeader,
 } from './fixtures';
 
 function url(path = '?q=hello'): string {
@@ -121,6 +123,7 @@ describe('GET /api/consult', () => {
   let adapter: ReturnType<typeof vi.fn<Adapter>>;
 
   beforeEach(() => {
+    resetClaims();
     resetAcceptsCache();
     resetUsdcFaceCache();
     resetArcProblemLog();
@@ -363,7 +366,7 @@ describe('GET /api/consult', () => {
       events.push('adapter');
       return { answer: 'answer' };
     });
-    const signature = 'raw-payment-signature';
+    const signature = paymentSignatureFor(v2Accept);
 
     const res = await GET(
       new Request(url(), { headers: { 'PAYMENT-SIGNATURE': signature } }),
@@ -392,9 +395,7 @@ describe('GET /api/consult', () => {
   it('uses the USDC v1 relay for an X-PAYMENT payload on the Base network', async () => {
     fetchMock = fetchFor({ usdc: true });
     vi.stubGlobal('fetch', fetchMock);
-    const rawPaymentHeader = Buffer.from(
-      JSON.stringify({ network: 'base', authorization: 'usdc-payment' }),
-    ).toString('base64');
+    const rawPaymentHeader = usdcV1PaymentHeader();
 
     const res = await GET(request('?q=hello', rawPaymentHeader));
 
@@ -415,7 +416,7 @@ describe('GET /api/consult', () => {
   it('keeps an eip155:137 X-PAYMENT payload on the JPYC rail', async () => {
     fetchMock = fetchFor({ usdc: true });
     vi.stubGlobal('fetch', fetchMock);
-    const polygonPayload = { network: 'eip155:137', authorization: 'jpyc-payment' };
+    const polygonPayload = jpycPayment(7);
     const rawPaymentHeader = Buffer.from(JSON.stringify(polygonPayload)).toString('base64');
 
     const res = await GET(request('?q=hello', rawPaymentHeader));
@@ -436,7 +437,7 @@ describe('GET /api/consult', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     const res = await GET(
-      new Request(url(), { headers: { 'PAYMENT-SIGNATURE': 'raw-signature' } }),
+      new Request(url(), { headers: { 'PAYMENT-SIGNATURE': paymentSignatureFor(v2Accept) } }),
     );
 
     expect(res.status).toBe(402);
@@ -453,7 +454,7 @@ describe('GET /api/consult', () => {
     adapter.mockRejectedValue(new Error('upstream unavailable'));
 
     const res = await GET(
-      new Request(url(), { headers: { 'PAYMENT-SIGNATURE': 'raw-signature' } }),
+      new Request(url(), { headers: { 'PAYMENT-SIGNATURE': paymentSignatureFor(v2Accept) } }),
     );
 
     expect(res.status).toBe(502);
@@ -471,7 +472,7 @@ describe('GET /api/consult', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     const res = await GET(
-      new Request(url(), { headers: { 'PAYMENT-SIGNATURE': 'raw-signature' } }),
+      new Request(url(), { headers: { 'PAYMENT-SIGNATURE': paymentSignatureFor(v2Accept) } }),
     );
     const body = (await res.json()) as Record<string, unknown>;
 
@@ -495,7 +496,7 @@ describe('GET /api/consult', () => {
       vi.stubGlobal('fetch', fetchMock);
 
       const res = await GET(
-        new Request(url(), { headers: { 'PAYMENT-SIGNATURE': 'raw-signature' } }),
+        new Request(url(), { headers: { 'PAYMENT-SIGNATURE': paymentSignatureFor(v2Accept) } }),
       );
 
       expect(res.status).toBe(status);
@@ -559,7 +560,7 @@ describe('GET /api/consult', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
     const req = rail === 'unpaid' ? new Request(url()) : rail === 'JPYC' ? request()
-      : new Request(url(), { headers: { 'PAYMENT-SIGNATURE': 'signature' } });
+      : new Request(url(), { headers: { 'PAYMENT-SIGNATURE': paymentSignatureFor(v2Accept) } });
 
     const res = await GET(req);
 
@@ -576,7 +577,7 @@ describe('GET /api/consult', () => {
     fetchMock = fetchFor({ usdc: true, requirements: { ...usdcFace, v1Accepts: { ...usdcAccept, payTo: attacker } } });
     vi.stubGlobal('fetch', fetchMock);
     const req = rail === 'unpaid' ? new Request(url()) : rail === 'JPYC' ? request()
-      : new Request(url(), { headers: { 'PAYMENT-SIGNATURE': 'signature' } });
+      : new Request(url(), { headers: { 'PAYMENT-SIGNATURE': paymentSignatureFor(v2Accept) } });
 
     const res = await GET(req);
 
@@ -622,8 +623,8 @@ describe('GET /api/consult', () => {
   });
 
   it.each<HeadersInit>([
-    { 'PAYMENT-SIGNATURE': 'signature' },
-    { 'PAYMENT-SIGNATURE': 'signature', 'X-PAYMENT': paymentHeader },
+    { 'PAYMENT-SIGNATURE': paymentSignatureFor(v2Accept) },
+    { 'PAYMENT-SIGNATURE': paymentSignatureFor(v2Accept), 'X-PAYMENT': paymentHeader },
     ...['base', 'base-sepolia', 'eip155:8453', 'eip155:84532'].map((network) => ({
       'X-PAYMENT': Buffer.from(JSON.stringify({ network, authorization: 'usdc-payment' })).toString('base64'),
     })),
@@ -654,7 +655,7 @@ describe('GET /api/consult', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    const res = await GET(new Request(url(), { headers: { 'PAYMENT-SIGNATURE': 'signature' } }));
+    const res = await GET(new Request(url(), { headers: { 'PAYMENT-SIGNATURE': paymentSignatureFor(v2Accept) } }));
 
     expect(res.status).toBe(402);
     expectNoStore(res);
@@ -685,7 +686,7 @@ describe('GET /api/consult', () => {
       return result;
     });
     vi.stubGlobal('fetch', fetchMock);
-    const res = await GET(new Request(url(), { headers: { 'PAYMENT-SIGNATURE': 'signature' } }));
+    const res = await GET(new Request(url(), { headers: { 'PAYMENT-SIGNATURE': paymentSignatureFor(v2Accept) } }));
     expect(res.status).toBe(500);
     expect(await res.json()).toEqual({ error: endpoint === 'verify' ? 'payment_verification_failed' : 'payment_settlement_failed' });
     expect(res.headers.get('PAYMENT-REQUIRED')).toBeNull();
@@ -730,14 +731,11 @@ describe('GET /api/consult', () => {
       expect(discoveryCalls(fetchMock)).toHaveLength(2);
     });
 
-    const usdcV1Header = Buffer.from(
-      JSON.stringify({ network: 'base', authorization: 'usdc-payment' }),
-    ).toString('base64');
-
+    // A different payment for each paid request (the same payment twice would be refused as reserved).
     it.each([
-      ['JPYC X-PAYMENT', () => request()],
-      ['USDC v1 X-PAYMENT', () => request('?q=hello', usdcV1Header)],
-      ['USDC v2 PAYMENT-SIGNATURE', () => new Request(url(), { headers: { 'PAYMENT-SIGNATURE': 'signature' } })],
+      ['JPYC X-PAYMENT', (n: number) => request('?q=hello', jpycPaymentHeader(n))],
+      ['USDC v1 X-PAYMENT', (n: number) => request('?q=hello', usdcV1PaymentHeader(0x1000 + n))],
+      ['USDC v2 PAYMENT-SIGNATURE', (n: number) => new Request(url(), { headers: { 'PAYMENT-SIGNATURE': paymentSignatureFor(v2Accept, 0x2000 + n) } })],
     ] as const)('reuses a listing under 5 minutes old for a %s payment and refetches at 5 minutes', async (_, paid) => {
       const now = vi.spyOn(Date, 'now').mockReturnValue(T0);
       fetchMock = fetchFor({ usdc: true });
@@ -745,12 +743,12 @@ describe('GET /api/consult', () => {
 
       await GET(new Request(url()));
       now.mockReturnValue(T0 + 5 * MIN - 1);
-      expect((await GET(paid())).status).toBe(200);
+      expect((await GET(paid(1))).status).toBe(200);
       expect(discoveryCalls(fetchMock)).toHaveLength(1);
       expect(relayCallsTo(fetchMock, 'requirements')).toHaveLength(1);
 
       now.mockReturnValue(T0 + 5 * MIN);
-      expect((await GET(paid())).status).toBe(200);
+      expect((await GET(paid(2))).status).toBe(200);
       expect(discoveryCalls(fetchMock)).toHaveLength(2);
       expect(relayCallsTo(fetchMock, 'requirements')).toHaveLength(2);
     });
@@ -848,7 +846,7 @@ describe('GET /api/consult', () => {
       expect(probe.headers.get('PAYMENT-REQUIRED')).toBe(paymentRequiredHeader);
       expect(relayCallsTo(fetchMock, 'requirements')).toHaveLength(1);
 
-      const paid = await GET(new Request(url(), { headers: { 'PAYMENT-SIGNATURE': 'signature' } }));
+      const paid = await GET(new Request(url(), { headers: { 'PAYMENT-SIGNATURE': paymentSignatureFor(v2Accept) } }));
       expect(paid.status).toBe(200);
       expect(relayCallsTo(fetchMock, 'requirements')).toHaveLength(2);
       for (const endpoint of ['verify', 'settle'] as const) {
@@ -876,7 +874,7 @@ describe('GET /api/consult', () => {
       now.mockReturnValue(T0 + 10 * MIN);
       state.requirementsStatus = 503;
 
-      const paid = await GET(new Request(url(), { headers: { 'PAYMENT-SIGNATURE': 'signature' } }));
+      const paid = await GET(new Request(url(), { headers: { 'PAYMENT-SIGNATURE': paymentSignatureFor(v2Accept) } }));
       expect(paid.status).toBe(402);
       expect(paid.headers.get('PAYMENT-REQUIRED')).toBeNull();
       const body = (await paid.json()) as { accepts: unknown[]; error: string };
@@ -902,7 +900,7 @@ describe('GET /api/consult', () => {
       await GET(new Request(url()));
       now.mockReturnValue(T0 + 10 * MIN);
       state.requirementsStatus = 404;
-      expect((await GET(new Request(url(), { headers: { 'PAYMENT-SIGNATURE': 'signature' } }))).status).toBe(402);
+      expect((await GET(new Request(url(), { headers: { 'PAYMENT-SIGNATURE': paymentSignatureFor(v2Accept) } }))).status).toBe(402);
 
       now.mockReturnValue(T0 + 11 * MIN);
       const probe = await GET(new Request(url()));
@@ -1053,7 +1051,7 @@ describe('GET /api/consult', () => {
         padded = Buffer.from(JSON.stringify({
           x402Version: 2,
           accepted: arcV2Accept,
-          payload: { authorization: { nonce: `0x${'ab'.repeat(32)}` }, signature: '0x00', filler },
+          payload: { authorization: usdcAuthorization(0x2001), signature: '0x00', filler },
         })).toString('base64');
       }
       const unpadded = padded.replace(/=+$/, '');

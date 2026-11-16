@@ -758,7 +758,7 @@ cases('5b. USDC rail selection', {
   'Arc payment with an unpadded PAYMENT-SIGNATURE': {
     config: 'arc',
     headers: signature(unpadded((filler) => ({
-      x402Version: 2, accepted: fx.arcV2Accept, payload: { signature: '0x00', filler },
+      x402Version: 2, accepted: fx.arcV2Accept, payload: { authorization: fx.usdcAuthorization(0x2001), signature: '0x00', filler },
     }))),
   },
   'Arc payment for other Arc terms (Base rail)': {

@@ -29,7 +29,8 @@ lib/openpay.ts            OpenPay の origin・決済条件の鮮度 (5 分 / 30
 lib/listing.ts            JPYC 出品 (discovery) のキャッシュと、resource だけを差し替えた accepts (acceptsFor)
 lib/usdcFace.ts           USDC 面 (relay/requirements) のキャッシュ・Arc 面の扱い・PAYMENT-REQUIRED
 lib/relay.ts              USDC relay の verify / settle (409 なら面を取り直して 402 requirements_mismatch)
-lib/purchase.ts           GET / HEAD /api/consult の本体 (consult: 決済条件 → 支払いなしの 402 → q → choosePayment → verify → 上流 → settle。consultHead: §20)
+lib/purchase.ts           GET / HEAD /api/consult の本体 (consult: 決済条件 → 支払いなしの 402 → q → choosePayment → verify 前の確かめ → 予約 → verify → 上流 (125 秒) → settle。consultHead: §20。予約: §21)
+lib/claims.ts             同じ支払いを 2 回処理しないための、プロセスの中だけの予約 (§21)
 lib/sellerPins.ts         必須設定・JPYC/USDC の seller pin 検証
 lib/paymentHeader.ts      base64/JSON デコード (X-PAYMENT・USDC requirements は厳密、PAYMENT-SIGNATURE は relay と同じ規則)
 lib/openapi.ts            x402scan 用の OpenAPI 文書。検証だけ共有し、OpenPay は支払いの経路と別に読む
@@ -1187,7 +1188,156 @@ rail の不一致でも返ること、README の 503 / 500 `settlement_unknown` 
 
 ### やっていないこと (次のフェーズ)
 
-- 同じ支払いを同時に何度も送ると、上流がその回数だけ動く (settle は 1 回)。→ C2
-- `maxDuration` の明示と、支払いの有効期限に対する上流の所要時間の確認。→ C2
-- settle が 202 のときに、OpenPay に状態を問い合わせて確定を待つこと。→ C2 で検討
+- 同じ支払いを同時に何度も送ると、上流がその回数だけ動く (settle は 1 回)。→ C2 (§21)
+- `maxDuration` の明示と、支払いの有効期限に対する上流の所要時間の確認。→ C2 (§21)
+- settle が 202 のときに、OpenPay に状態を問い合わせて確定を待つこと。→ C2b (§21 の「やっていないこと」)
 - 決済条件のキャッシュのまとめ読みと、失敗の直後に読み直さない仕組み。→ C3
+
+## 21. フェーズ C2: 支払いの予約・上流の時間切れ・settle の本文の大きさ (2026-11-16)
+
+全コードベースのレビュー (2026-11-15) で決めた挙動の変更の 2 つ目 (計画の D1・D3・R1・R4・R7・R8)。支払いの経路の挙動が変わる。
+
+### 直したこと
+
+1. **同じ支払いを同時に (または決済のあとに) もう一度送ると、上流がもう一度動いていた。** settle は 1 回しか
+   通らないので請求は 1 回だが、上流 (coo-icp の canister の呼び出し) はただで動いていた。
+2. **上流に時間の上限がなかった。** アダプタが自分の時間切れを持たないと、関数の上限まで待ち、そのあいだに
+   支払いの有効期限が切れて settle が通らなくなりえた。`maxDuration` も明示していなかった。
+3. **JPYC の settle の本文が facilitator の上限 (4096 byte) を超えると、verify と上流は動いたあとに settle が 413 で
+   断られていた** (`q` が resource の URL に入るので、長い `q` で起きる)。
+4. **facilitator の verify が返す予約の token を settle に渡していなかった** (OpenPay の SDK は渡す)。
+
+### 処理の順番 (lib/purchase.ts)
+
+1. 決済条件 → 支払いなしの 402 → `q_required` → `choosePayment` (ここまでは変えていない)。
+2. **verify の前の確かめ** (予約はまだ取らず、OpenPay にも何も送らない)。この順番で:
+   1. 出品者の pin (JPYC は `validateJpycRequirements`、USDC は relay と同じ `checkRelayPins`)。合わなければ 500。
+   2. 出品の決済条件から鍵が作れるか (JPYC: asset・forwarder・merchant・merchantValue・feeReceiver・feeValue。
+      USDC: 出品者が確かめた条件の network と asset)。作れなければ 500 `payment_verification_failed`
+      (記録は `JPYC payment terms not claimable` / `USDC payment terms not claimable`)。
+   3. 支払いから鍵が作れるか。作れなければ 402 `invalid_payment_payload`。
+   4. JPYC だけ: いちばん長い token (71 文字) が付いたとしても、settle の本文が UTF-8 で 4096 byte 以下か。
+      超えたら 400 `q_too_long`。
+3. **予約** (`claimAuthorization`)。期限までの残りが 155 秒 (上流 125 + 猶予 30) より短ければ 402
+   `insufficient_validity_window`。同じ鍵が予約中なら **409 `authorization_reserved`** (下)。
+4. verify。通ったら、期限までの残りをもう一度確かめる (verify に最大 35 秒かかるため。足りなければ 402
+   `insufficient_validity_window`、上流は動かさない)。JPYC は verify の応答から token を受け取る。
+5. 上流 (125 秒で打ち切り)。失敗も時間切れも 502 `upstream_error` (決済しない)。
+6. settle (JPYC は token を付ける)。応答の読み分けは §20 のまま。
+
+`app/api/consult/route.ts` に `export const maxDuration = 300`。いちばん長い購入は、出品と USDC の条件の取得
+5 + 5 秒、verify 35 秒 (+ relay の 409 のあとの取り直し 5 秒)、上流 125 秒、settle 60 秒 (+ 5 秒) のおよそ 240 秒。
+Arc は verify のあと 15 分以内に settle を始めないと relay が断る (relay の pending の印が 15 分) が、その前に終わる。
+この関係はテスト (test/reservation.test.ts) で定数から確かめている。
+
+### 予約 (lib/claims.ts)
+
+openpay-x402-sdk 0.11.1 の `authorizationClaims.mjs` を TS にしたもの。鍵の作り方は同じ。
+
+- JPYC の鍵: [支払いの network, asset, 支払い者, forwarder, merchant, merchantValue, feeReceiver, feeValue,
+  validAfter, validBefore, intentSalt]。アドレスは小文字、数は 10 進の正規形、network は `eip155:N` の正規形。
+- USDC の鍵: [出品者が確かめた条件の network, asset, 支払い者, nonce]。Base は v1 の条件が `base` と書くので、
+  同じ条件の v2 (`eip155:8453`) から取る。Arc は Arc の条件から取る。同じ nonce を v1 (X-PAYMENT) と
+  v2 (PAYMENT-SIGNATURE) で送っても 1 つの支払い。Arc の authorization を Base の条件で包み直したものは別の鍵に
+  なるが、Base では署名が通らない (署名の domain が違う) ので、relay に断られて予約は外れる。
+- 不変条件: **予約が残っているのは、その支払いをこのプロセスで処理している途中か、ここで settle まで進めたとき。**
+
+| 終わり方 | 予約 |
+|---|---|
+| verify の前の確かめで断った (500 / 402 / 400) | 取っていない |
+| verify が通らない (402)・OpenPay が答えない (503)・relay の 409 (402 / 500)・例外 | 外す |
+| verify のあとの期限の確かめで断った (402) | 外す (期限は縮む一方なので、外しても同じ支払いは通らない) |
+| 上流が失敗した (502) | 外す |
+| 上流が時間切れ (502) | 上流の呼び出しが実際に終わってから外す (先に外すと、同じ支払いで上流が同時に 2 回動きうる) |
+| settle を送った (200 / 402 / 502 pending / 500 unknown / relay の 409 / 例外) | 残す |
+
+- 残した予約は、支払いの有効期限 (`validBefore`) か、取ってから 8 日 (Arc の支払いの期限の上限と同じ) の早いほうで
+  忘れる (期限がずっと先の支払いで、メモリを使い続けないため)。期限の窓の判定は `validBefore` で行う。
+- 外すのは、取った本人の予約だけ (owner の symbol で確かめる)。期限切れで消えたあと別の要求が取り直した予約を、
+  古い要求が外さない。
+- 外すのは `consult` の 1 か所の `try / finally` だけ。settle を送る直前に「残す」に切り替える。
+
+### 409 `authorization_reserved` にした理由 (402 にしない)
+
+本文は `{ error: 'authorization_reserved', message: 'This payment authorization is already being processed or was
+already used here. Do not pay again.' }`。`x402Version`・`accepts`・`PAYMENT-REQUIRED` は付けない。`no-store`。
+
+- x402 のクライアント (x402-fetch / x402-axios) は 402 にだけ反応して払う。決済条件つきの 402 を返すと、すでに
+  払った支払いの再送に「もう一度払って」と答えることになり、二重払いを招く。409 は自動では払われない。
+- 一般的な再試行のライブラリ (got・ky・axios-retry の既定) は 408・429・5xx を再試行し、402 と 409 は再試行
+  しない。だから 409 で再試行の繰り返しにならない。OpenPay 自身のゲートも、authorization の衝突に決済条件を
+  付けない 409 を返す。
+- 上流の失敗のあとは予約を外すので、got や ky が 502 を同じヘッダーで自動で再試行しても 409 にはならない
+  (請求していない支払いに「払い直さないで」と答えない)。
+
+### facilitator の予約の token
+
+verify の 200 の本文の `reservationToken` が `^[A-Za-z0-9_-]{1,71}$` に合えば、そのまま settle の本文の一番上に
+`reservationToken` として付ける (切り詰めたり直したりしない)。なければ `verify ok without reservation token (jpyc)`、
+形が合わなければ `verify returned malformed reservation token (jpyc)` を記録し、token なしで settle する
+(必須にはしない。計画の R8)。
+
+**いまの OpenPay では、token はどの結果も変えない。** facilitator の settle は、token の有無にかかわらず
+最初に verify した resource と照合し、token は渡されたときだけ照合する。記録は SET NX で 1 回だけ書かれるので、
+記録があれば token はこちらが受け取ったものと同じ。token は、OpenPay が token を必須にしたときのための準備で、
+守りとしては数えない。155 秒の窓は facilitator が token を出す条件 (残り 95 秒以上) を満たすので、上の記録が
+出るのは、同じ支払いの 2 回目の verify か OpenPay 側の KV の不調のとき。
+
+### 本番で確かめたこと (2026-11-16・支払いなしの 402 を GET で読んだだけ)
+
+- 出品の JPYC の条件は鍵を作れる形だった (asset・merchant・feeReceiver はアドレス、merchantValue と feeValue は
+  10 進の正規形、payTo は forwarder と同じ)。作れない形だと、C2 で JPYC の販売がすべて 500 になる。
+- `q` の上限: 最小の形の JPYC の支払いと 71 文字の token で、`q` が空の settle の本文は 1692 byte。
+  残り 2404 byte が、パーセント符号化した `q` に使える (英数字でおよそ 2404 文字、日本語でおよそ 267 文字)。
+  出品の説明には日本語が入っているので、文字数ではなく UTF-8 の byte で数える必要がある。
+
+### この仕組みで守れないこと
+
+| 守れないこと | 理由・代わり |
+|---|---|
+| Vercel の別のインスタンスに届いた同じ支払い | 予約はプロセスの中だけ。共有ストアが要る (未対応)。JPYC は facilitator が最初に verify した resource に支払いを結びつけるので、別の `q` の使い回しは決済されない (上流は 1 回ただで動く)。同じ `q` の使い回しは先に決済した方が回答を受け取る。Base は relay 側にも同じ仕組みがない。Arc は relay の pending の印が 15 分止める |
+| 資金のあるウォレットが新しい署名を作り続けること | 予約は同じ署名の使い回ししか止めない。上流を失敗させ続ければ、上流はただで動く。抑えられるのは Vercel の WAF のレート制限だけ (計画の N2 / R12。持ち主の作業) |
+| JPYC の再試行で URL を変えること | facilitator は最初に verify した resource に支払いを結びつける。払い直さずに再試行するときは同じ URL (同じ `q`) で |
+| 買い手の時計が大きく遅れていること | Base の支払いの期限は 300 秒なので、署名から届くまでに 145 秒より長くかかると 402 `insufficient_validity_window` |
+
+### やっていないこと
+
+- **C2b (C2 のあとの別の PR):** settle が 202 か結果不明のとき、JPYC だけ facilitator の status に問い合わせる
+  (3 回まで・30 秒以内・要求の開始から 270 秒を超えない。`state: 'settled'` のときだけ結果を変える。`unused` は
+  「請求されていない」ではないので 402 にしない。relay には status がない)。
+- アダプタごとに上流の上限を変えること (http は 35 秒など)。1 つの定数のほうが期限の窓の規則が簡単なので、しない。
+- relay の `authorization_in_use` を 409 に読み替えること。こちらが時間切れにした verify でもその印が残るので、
+  正直な買い手を 15 分止めてしまう。しない。
+- JPYC の token を必須にすること。持ち主の最初の実購入で token が返ることを確かめてから (計画の R8)。
+
+### golden テストの変化 (384 場面)
+
+挙動を固定するテストのうち、324 場面は変更なし。60 場面が変わり、内訳は次の 3 つだけ (場面の増減なし):
+
+- 53 場面: JPYC の verify が通る場面で、記録に `verify ok without reservation token (jpyc)` が 1 行増えた
+  (golden の facilitator は token を返さない)。応答・fetch・上流の呼び出しは同じ。
+- 6 場面: 支払いから鍵が作れないので、OpenPay にも上流にも何も送らずに 402 `invalid_payment_payload` になった
+  (以前は OpenPay の作り物の応答が通していた)。`X-PAYMENT` が JSON の `null` / `base-sepolia` と
+  `eip155:8453` を名乗る中身のない支払い (USDC 面ありで JPYC の rail に回るもの) / 空の `PAYMENT-SIGNATURE`
+  (Base と Arc) / 読めない `PAYMENT-SIGNATURE`。本物の OpenPay も断る支払いで、買い手に返る理由の文字列が
+  `invalid_payment_payload` に揃った。
+- 1 場面 (`Arc payment with an unpadded PAYMENT-SIGNATURE`): テストの支払いに authorization を入れた
+  (rail の選び方を確かめる場面なので、鍵が作れる支払いにした)。支払いの base64 だけが変わり、それ以外は同じ。
+
+### テスト
+
+- test/claims.test.ts: 鍵 (正規化・作れない支払いと条件・v1 と v2 の同じ nonce・Arc と Base の別の鍵)、
+  窓の境目 (155 秒ちょうどは通る・1 秒足りないと断る・1 ミリ秒の端数)、予約と外し方、owner の確かめ、
+  `validBefore` と 8 日の上限で忘れること。
+- test/reservation.test.ts: 409 の本文とヘッダー、処理中と決済後の同じ支払い、別の `q` の同じ支払い、
+  v1 と v2 の同じ nonce、包み直した Arc の支払い、終わり方ごとの外す・残す (上の表の全行)、作れない支払いと
+  条件、verify の前と後の窓、token (渡す・ない・長すぎる・文字列でない・ほかの文字)、本文の上限の境目
+  (4096 byte ちょうどは売れる・1 byte 多いと 400・UTF-8 の byte で数える・USDC には上限をかけない)、
+  上流の時間切れ (偽のタイマーで 125 秒・時間切れのあとも上流が終わるまで 409・終わったら売れる・
+  間に合ったときにタイマーを残さない)、所要時間の定数。
+- 既存のテスト (route / openpay / purchase / openapi) は、同じ支払いを 2 回使う場所を別の支払いにし、
+  中身のない支払いを本物の形にした。テストごとに予約を消す (`resetClaims`)。
+- わざと壊して落ちることを確かめた (15 通り): 外さない・いつも外す・settle の前に残すに切り替えない・
+  時間切れですぐ外す・verify のあとの窓の確かめを消す・本文の確かめを消す・窓の境目を 1 秒ずらす・8 日の上限を
+  消す・owner の確かめを消す・token を渡さない・token の長さの上限をずらす・文字数で数える・仮の token を
+  短くする・タイマーを止めない・Arc の鍵を Base の条件で作る。どれも新しいテストのどれかが落ちる。

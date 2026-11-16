@@ -5,13 +5,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { GET, HEAD } from '@/app/api/consult/route';
 import { selectedAdapter } from '@/lib/adapters';
+import { resetClaims } from '@/lib/claims';
 import { resetAcceptsCache } from '@/lib/listing';
 import { settleOutcome, verifyOutcome } from '@/lib/openpay';
 import { resetArcProblemLog, resetUsdcFaceCache } from '@/lib/usdcFace';
 
 import {
   OPENPAY, listing, merchant, paymentHeader, paymentSignatureFor, resource, resourceId, response, usdcFace,
-  usdcMerchant, v2Accept,
+  usdcMerchant, v2Accept, jpycPaymentHeader,
 } from './fixtures';
 
 vi.mock('@/lib/adapters', () => ({ selectedAdapter: vi.fn() }));
@@ -82,6 +83,7 @@ describe('OpenPay calls', () => {
   }
 
   beforeEach(() => {
+    resetClaims();
     resetAcceptsCache();
     resetUsdcFaceCache();
     resetArcProblemLog();
@@ -280,12 +282,14 @@ describe('OpenPay calls', () => {
       fetchMock.mockImplementation(async (input, init) =>
         (ENDPOINT_BY_URL[String(input)] === endpoint ? response(body, status) : normal(input, init)));
     };
+    // A different payment per request: a payment that reached settle stays reserved.
     const requests: Array<[Endpoint | null, unknown, number, Record<string, string>]> = [
       ['facilitator verify', { isValid: true, invalidReason: secretRemote, payer: secretRemote }, 503, JPYC],
       ['relay verify', { error: secretRemote }, 500, BASE_V2],
-      ['facilitator settle', { success: true, transaction: secretRemote }, 502, JPYC],
-      ['relay settle', { success: false, errorReason: 'pending', transaction: secretRemote }, 202, BASE_V2],
-      [null, null, 0, JPYC],
+      ['facilitator settle', { success: true, transaction: secretRemote }, 502, { 'X-PAYMENT': jpycPaymentHeader(3) }],
+      ['relay settle', { success: false, errorReason: 'pending', transaction: secretRemote }, 202,
+        { 'PAYMENT-SIGNATURE': paymentSignatureFor(v2Accept, 0x2004) }],
+      [null, null, 0, { 'X-PAYMENT': jpycPaymentHeader(5) }],
     ];
     const normal = fetchMock.getMockImplementation()!;
     adapter.mockResolvedValue({ answer: secretAnswer });

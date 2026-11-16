@@ -6,7 +6,7 @@ import type { UsdcFace } from '@/lib/types';
 import {
   OPENPAY, arcPaymentRequiredHeader, arcV2Accept, catalogAccept, listing, merchant, paymentHeader,
   paymentPayload, paymentRequiredHeader, paymentSignatureFor, resource, resourceId, response, usdcAccept,
-  usdcFace, usdcFaceWithArc, usdcMerchant, v2Accept,
+  usdcFace, usdcFaceWithArc, usdcMerchant, usdcV1PaymentHeader, v2Accept,
 } from './fixtures';
 
 vi.mock('@/lib/adapters', () => ({ selectedAdapter: vi.fn() }));
@@ -130,9 +130,15 @@ describe('choosePayment', () => {
   it('hands the relay the buyer header unchanged', () => {
     const x = onNetwork('base');
     expect(choosePayment({ paymentHeader: x, paymentSignatureHeader: null }, [catalogAccept], usdcFace))
-      .toEqual({ kind: 'usdc', face: usdcFace, headers: { paymentHeader: x }, rail: 'base' });
+      .toEqual({
+        kind: 'usdc', face: usdcFace, headers: { paymentHeader: x }, rail: 'base',
+        payload: { network: 'base', authorization: 'payment' },
+      });
     expect(choosePayment({ paymentHeader: x, paymentSignatureHeader: SIG_BASE }, [catalogAccept], usdcFace))
-      .toEqual({ kind: 'usdc', face: usdcFace, headers: { paymentSignatureHeader: SIG_BASE }, rail: 'base' });
+      .toEqual({
+        kind: 'usdc', face: usdcFace, headers: { paymentSignatureHeader: SIG_BASE }, rail: 'base',
+        payload: JSON.parse(Buffer.from(SIG_BASE, 'base64').toString('utf8')),
+      });
   });
 });
 
@@ -160,7 +166,7 @@ describe('two concurrent paid requests on one module', () => {
   };
   const PAID: Record<string, Record<string, string>> = {
     jpyc: { 'X-PAYMENT': paymentHeader },
-    base1: { 'X-PAYMENT': onNetwork('base') },
+    base1: { 'X-PAYMENT': usdcV1PaymentHeader() },
     base2: { 'PAYMENT-SIGNATURE': SIG_BASE },
     arc: { 'PAYMENT-SIGNATURE': SIG_ARC },
   };

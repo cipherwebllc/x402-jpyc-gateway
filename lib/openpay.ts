@@ -103,17 +103,62 @@ export function settleOutcome({ status, body }: OpenPayReply): SettleOutcome {
   return { kind: 'unknown' };
 }
 
+// facilitator は verify / settle の本文が UTF-8 で 4096 byte を超えると 413 で断る。
+export const FACILITATOR_BODY_LIMIT_BYTES = 4096;
+// verify が返す予約の token は `x402r1_` と 64 桁の 16 進。settle に渡すのは、この長さまでの安全な文字だけ。
+export const RESERVATION_TOKEN_MAX_LENGTH = 71;
+const RESERVATION_TOKEN = new RegExp(`^[A-Za-z0-9_-]{1,${RESERVATION_TOKEN_MAX_LENGTH}}$`);
+
+// verify・settle・大きさの確認は、必ずこの 1 つの組み立てを使う (食い違うと「verify は通り、settle は 413」が起きる)。
+function facilitatorBody(
+  paymentPayload: unknown,
+  paymentRequirements: PaymentRequirements,
+  reservationToken?: string,
+): string {
+  return JSON.stringify({
+    x402Version: 1,
+    paymentPayload,
+    paymentRequirements,
+    ...(reservationToken === undefined ? {} : { reservationToken }),
+  });
+}
+
+/**
+ * settle の本文が facilitator の上限に収まるか。token は verify のあとでしか分からないので、
+ * いちばん長い token が付いたとして測る。本文の大きさはほぼ q (resource の URL に入る) で決まる。
+ */
+export function facilitatorSettleBodyFits(
+  paymentPayload: unknown,
+  paymentRequirements: PaymentRequirements,
+): boolean {
+  const longest = facilitatorBody(paymentPayload, paymentRequirements, 'x'.repeat(RESERVATION_TOKEN_MAX_LENGTH));
+  return Buffer.byteLength(longest, 'utf8') <= FACILITATOR_BODY_LIMIT_BYTES;
+}
+
+export type ReservationToken =
+  | { kind: 'token'; token: string }
+  | { kind: 'absent' }
+  /** 形が合わない値。settle には渡さない (切り詰めたり直したりもしない)。 */
+  | { kind: 'malformed' };
+
+/** facilitator の verify が通ったときの本文から、settle に渡す予約の token を読む。 */
+export function reservationTokenOf(reply: OpenPayReply): ReservationToken {
+  const token = reply.body?.reservationToken;
+  if (token === undefined) return { kind: 'absent' };
+  return typeof token === 'string' && RESERVATION_TOKEN.test(token) ? { kind: 'token', token } : { kind: 'malformed' };
+}
+
 // async にしない: pin の不一致は呼んだその場で throw し、facilitator には何も送らない。
 function callFacilitator(
   path: 'verify' | 'settle',
   paymentPayload: unknown,
   paymentRequirements: PaymentRequirements,
+  reservationToken?: string,
 ): Promise<OpenPayReply> {
   validateJpycRequirements(paymentRequirements, sellerConfig().expectedRecipient);
-  const body = JSON.stringify({ x402Version: 1, paymentPayload, paymentRequirements });
   return postToOpenPay(
     '/api/facilitator/' + path,
-    body,
+    facilitatorBody(paymentPayload, paymentRequirements, reservationToken),
     path === 'verify' ? VERIFY_TIMEOUT_MS : SETTLE_TIMEOUT_MS,
   );
 }
@@ -125,11 +170,13 @@ export function verifyPayment(
   return callFacilitator('verify', paymentPayload, paymentRequirements);
 }
 
+/** reservationToken は verify が返した予約の token (なければ付けない)。 */
 export function settlePayment(
   paymentPayload: unknown,
   paymentRequirements: PaymentRequirements,
+  reservationToken?: string,
 ): Promise<OpenPayReply> {
-  return callFacilitator('settle', paymentPayload, paymentRequirements);
+  return callFacilitator('settle', paymentPayload, paymentRequirements, reservationToken);
 }
 
 export function encodePaymentResponse(settle: Record<string, unknown>): string {

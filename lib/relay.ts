@@ -6,6 +6,15 @@ import { arcFaceProblem, rejectSellerRequirements, sellerConfig, validateUsdcFac
 import type { PaymentRequirements, UsdcFace, UsdcRail } from './types';
 import { paymentRequiredHeaderFor, resetUsdcFaceCache, usdcFace } from './usdcFace';
 
+/** USDC の決済条件が出品者の pin に合うか。合わなければ理由を記録して throw する。 */
+export function checkRelayPins(face: UsdcFace, rail: UsdcRail): void {
+  const config = sellerConfig();
+  validateUsdcFace(face, config);
+  if (rail === 'arc' && (!face.arc || arcFaceProblem(face, config) !== null)) {
+    rejectSellerRequirements('Arc face unavailable');
+  }
+}
+
 // async にしない: pin の不一致は呼んだその場で throw し、relay には何も送らない。
 export function relayPayment(
   path: 'verify' | 'settle',
@@ -14,11 +23,8 @@ export function relayPayment(
   jpycAccepts: PaymentRequirements[],
   rail: UsdcRail = 'base',
 ): Promise<OpenPayReply | Response> {
+  checkRelayPins(face, rail);
   const config = sellerConfig();
-  validateUsdcFace(face, config);
-  if (rail === 'arc' && (!face.arc || arcFaceProblem(face, config) !== null)) {
-    rejectSellerRequirements('Arc face unavailable');
-  }
   // Bind the relay to this request's validated terms, including during settlement. The pin's
   // shape names the rail; the relay answers 409 if the payment was made on another rail.
   const body = JSON.stringify({

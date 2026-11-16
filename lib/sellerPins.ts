@@ -38,7 +38,7 @@ export const ARC_NETWORKS = ['eip155:5042', 'eip155:5042002'];
 const ARC_USDC = '0x3600000000000000000000000000000000000000';
 // Gateway rejects authorizations valid for less than 3 days; OpenPay uses 604900 seconds.
 const ARC_MIN_TIMEOUT_SECONDS = 3 * 24 * 60 * 60;
-const ARC_MAX_TIMEOUT_SECONDS = 8 * 24 * 60 * 60;
+export const ARC_MAX_TIMEOUT_SECONDS = 8 * 24 * 60 * 60;
 
 const BURN_RECIPIENTS = new Set([
   '0x0000000000000000000000000000000000000000',

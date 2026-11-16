@@ -3126,13 +3126,7 @@ exports[`3. paid pre-checks > X-PAYMENT and PAYMENT-SIGNATURE, USDC on (Base) 1`
 
 exports[`3. paid pre-checks > X-PAYMENT base64 of JSON null 1`] = `
 {
-  "adapterCalls": [
-    [
-      {
-        "q": "hello",
-      },
-    ],
-  ],
+  "adapterCalls": [],
   "consoleErrors": [],
   "fetches": [
     {
@@ -3151,32 +3145,6 @@ exports[`3. paid pre-checks > X-PAYMENT base64 of JSON null 1`] = `
       "method": "GET",
       "url": "https://open-pay.jp/api/x402/relay/requirements?resourceId=resource-id",
     },
-    {
-      "body": "{"x402Version":1,"paymentPayload":null,"paymentRequirements":<<JPYC_ACCEPT>>}",
-      "cache": null,
-      "hasSignal": true,
-      "headers": {
-        "content-type": "application/json",
-      },
-      "method": "POST",
-      "otherInit": {
-        "redirect": "manual",
-      },
-      "url": "https://open-pay.jp/api/facilitator/verify",
-    },
-    {
-      "body": "{"x402Version":1,"paymentPayload":null,"paymentRequirements":<<JPYC_ACCEPT>>}",
-      "cache": null,
-      "hasSignal": true,
-      "headers": {
-        "content-type": "application/json",
-      },
-      "method": "POST",
-      "otherInit": {
-        "redirect": "manual",
-      },
-      "url": "https://open-pay.jp/api/facilitator/settle",
-    },
   ],
   "requests": [
     {
@@ -3186,7 +3154,7 @@ exports[`3. paid pre-checks > X-PAYMENT base64 of JSON null 1`] = `
       },
       "label": "request",
       "response": {
-        "body": "{"answer":"answer"}",
+        "body": "{"x402Version":1,"accepts":[<<JPYC_ACCEPT>>,<<USDC_V1_ACCEPT>>],"error":"invalid_payment_payload"}",
         "headers": [
           [
             "cache-control",
@@ -3197,11 +3165,11 @@ exports[`3. paid pre-checks > X-PAYMENT base64 of JSON null 1`] = `
             "application/json",
           ],
           [
-            "x-payment-response",
-            "eyJzdWNjZXNzIjp0cnVlLCJ0cmFuc2FjdGlvbiI6IjB4anB5Y3NldHRsZWQiLCJuZXR3b3JrIjoiZWlwMTU1OjEzNyJ9",
+            "payment-required",
+            "<<PAYMENT_REQUIRED_BASE>>",
           ],
         ],
-        "status": 200,
+        "status": 402,
         "statusText": "",
       },
       "url": "https://untrusted-request-host.example/api/consult?q=hello",
@@ -3211,10 +3179,6 @@ exports[`3. paid pre-checks > X-PAYMENT base64 of JSON null 1`] = `
     "▶ request",
     "fetch discovery",
     "fetch requirements",
-    "fetch facilitatorVerify",
-    "selectedAdapter",
-    "adapter",
-    "fetch facilitatorSettle",
   ],
 }
 `;
@@ -3418,13 +3382,7 @@ exports[`3. paid pre-checks > X-PAYMENT network base-sepolia, USDC off 1`] = `
 
 exports[`3. paid pre-checks > X-PAYMENT network base-sepolia, USDC on (JPYC rail) 1`] = `
 {
-  "adapterCalls": [
-    [
-      {
-        "q": "hello",
-      },
-    ],
-  ],
+  "adapterCalls": [],
   "consoleErrors": [],
   "fetches": [
     {
@@ -3443,32 +3401,6 @@ exports[`3. paid pre-checks > X-PAYMENT network base-sepolia, USDC on (JPYC rail
       "method": "GET",
       "url": "https://open-pay.jp/api/x402/relay/requirements?resourceId=resource-id",
     },
-    {
-      "body": "{"x402Version":1,"paymentPayload":{"network":"base-sepolia","authorization":"usdc-payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
-      "cache": null,
-      "hasSignal": true,
-      "headers": {
-        "content-type": "application/json",
-      },
-      "method": "POST",
-      "otherInit": {
-        "redirect": "manual",
-      },
-      "url": "https://open-pay.jp/api/facilitator/verify",
-    },
-    {
-      "body": "{"x402Version":1,"paymentPayload":{"network":"base-sepolia","authorization":"usdc-payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
-      "cache": null,
-      "hasSignal": true,
-      "headers": {
-        "content-type": "application/json",
-      },
-      "method": "POST",
-      "otherInit": {
-        "redirect": "manual",
-      },
-      "url": "https://open-pay.jp/api/facilitator/settle",
-    },
   ],
   "requests": [
     {
@@ -3478,7 +3410,7 @@ exports[`3. paid pre-checks > X-PAYMENT network base-sepolia, USDC on (JPYC rail
       },
       "label": "request",
       "response": {
-        "body": "{"answer":"answer"}",
+        "body": "{"x402Version":1,"accepts":[<<JPYC_ACCEPT>>,<<USDC_V1_ACCEPT>>],"error":"invalid_payment_payload"}",
         "headers": [
           [
             "cache-control",
@@ -3489,11 +3421,11 @@ exports[`3. paid pre-checks > X-PAYMENT network base-sepolia, USDC on (JPYC rail
             "application/json",
           ],
           [
-            "x-payment-response",
-            "eyJzdWNjZXNzIjp0cnVlLCJ0cmFuc2FjdGlvbiI6IjB4anB5Y3NldHRsZWQiLCJuZXR3b3JrIjoiZWlwMTU1OjEzNyJ9",
+            "payment-required",
+            "<<PAYMENT_REQUIRED_BASE>>",
           ],
         ],
-        "status": 200,
+        "status": 402,
         "statusText": "",
       },
       "url": "https://untrusted-request-host.example/api/consult?q=hello",
@@ -3503,10 +3435,6 @@ exports[`3. paid pre-checks > X-PAYMENT network base-sepolia, USDC on (JPYC rail
     "▶ request",
     "fetch discovery",
     "fetch requirements",
-    "fetch facilitatorVerify",
-    "selectedAdapter",
-    "adapter",
-    "fetch facilitatorSettle",
   ],
 }
 `;
@@ -3723,13 +3651,7 @@ exports[`3. paid pre-checks > X-PAYMENT network eip155:8453, USDC off 1`] = `
 
 exports[`3. paid pre-checks > X-PAYMENT network eip155:8453, USDC on (JPYC rail) 1`] = `
 {
-  "adapterCalls": [
-    [
-      {
-        "q": "hello",
-      },
-    ],
-  ],
+  "adapterCalls": [],
   "consoleErrors": [],
   "fetches": [
     {
@@ -3748,32 +3670,6 @@ exports[`3. paid pre-checks > X-PAYMENT network eip155:8453, USDC on (JPYC rail)
       "method": "GET",
       "url": "https://open-pay.jp/api/x402/relay/requirements?resourceId=resource-id",
     },
-    {
-      "body": "{"x402Version":1,"paymentPayload":{"network":"eip155:8453","authorization":"usdc-payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
-      "cache": null,
-      "hasSignal": true,
-      "headers": {
-        "content-type": "application/json",
-      },
-      "method": "POST",
-      "otherInit": {
-        "redirect": "manual",
-      },
-      "url": "https://open-pay.jp/api/facilitator/verify",
-    },
-    {
-      "body": "{"x402Version":1,"paymentPayload":{"network":"eip155:8453","authorization":"usdc-payment"},"paymentRequirements":<<JPYC_ACCEPT>>}",
-      "cache": null,
-      "hasSignal": true,
-      "headers": {
-        "content-type": "application/json",
-      },
-      "method": "POST",
-      "otherInit": {
-        "redirect": "manual",
-      },
-      "url": "https://open-pay.jp/api/facilitator/settle",
-    },
   ],
   "requests": [
     {
@@ -3783,7 +3679,7 @@ exports[`3. paid pre-checks > X-PAYMENT network eip155:8453, USDC on (JPYC rail)
       },
       "label": "request",
       "response": {
-        "body": "{"answer":"answer"}",
+        "body": "{"x402Version":1,"accepts":[<<JPYC_ACCEPT>>,<<USDC_V1_ACCEPT>>],"error":"invalid_payment_payload"}",
         "headers": [
           [
             "cache-control",
@@ -3794,11 +3690,11 @@ exports[`3. paid pre-checks > X-PAYMENT network eip155:8453, USDC on (JPYC rail)
             "application/json",
           ],
           [
-            "x-payment-response",
-            "eyJzdWNjZXNzIjp0cnVlLCJ0cmFuc2FjdGlvbiI6IjB4anB5Y3NldHRsZWQiLCJuZXR3b3JrIjoiZWlwMTU1OjEzNyJ9",
+            "payment-required",
+            "<<PAYMENT_REQUIRED_BASE>>",
           ],
         ],
-        "status": 200,
+        "status": 402,
         "statusText": "",
       },
       "url": "https://untrusted-request-host.example/api/consult?q=hello",
@@ -3808,10 +3704,6 @@ exports[`3. paid pre-checks > X-PAYMENT network eip155:8453, USDC on (JPYC rail)
     "▶ request",
     "fetch discovery",
     "fetch requirements",
-    "fetch facilitatorVerify",
-    "selectedAdapter",
-    "adapter",
-    "fetch facilitatorSettle",
   ],
 }
 `;
@@ -4133,13 +4025,7 @@ exports[`3. paid pre-checks > empty PAYMENT-SIGNATURE with USDC off 1`] = `
 
 exports[`3. paid pre-checks > empty PAYMENT-SIGNATURE with USDC on (Arc) 1`] = `
 {
-  "adapterCalls": [
-    [
-      {
-        "q": "hello",
-      },
-    ],
-  ],
+  "adapterCalls": [],
   "consoleErrors": [],
   "fetches": [
     {
@@ -4158,32 +4044,6 @@ exports[`3. paid pre-checks > empty PAYMENT-SIGNATURE with USDC on (Arc) 1`] = `
       "method": "GET",
       "url": "https://open-pay.jp/api/x402/relay/requirements?resourceId=resource-id",
     },
-    {
-      "body": "{"resourceId":"resource-id","paymentRequirements":<<USDC_V1_ACCEPT>>,"paymentSignatureHeader":""}",
-      "cache": null,
-      "hasSignal": true,
-      "headers": {
-        "content-type": "application/json",
-      },
-      "method": "POST",
-      "otherInit": {
-        "redirect": "manual",
-      },
-      "url": "https://open-pay.jp/api/x402/relay/verify",
-    },
-    {
-      "body": "{"resourceId":"resource-id","paymentRequirements":<<USDC_V1_ACCEPT>>,"paymentSignatureHeader":""}",
-      "cache": null,
-      "hasSignal": true,
-      "headers": {
-        "content-type": "application/json",
-      },
-      "method": "POST",
-      "otherInit": {
-        "redirect": "manual",
-      },
-      "url": "https://open-pay.jp/api/x402/relay/settle",
-    },
   ],
   "requests": [
     {
@@ -4193,7 +4053,7 @@ exports[`3. paid pre-checks > empty PAYMENT-SIGNATURE with USDC on (Arc) 1`] = `
       },
       "label": "request",
       "response": {
-        "body": "{"answer":"answer"}",
+        "body": "{"x402Version":1,"accepts":[<<JPYC_ACCEPT>>,<<USDC_V1_ACCEPT>>],"error":"invalid_payment_payload"}",
         "headers": [
           [
             "cache-control",
@@ -4204,15 +4064,11 @@ exports[`3. paid pre-checks > empty PAYMENT-SIGNATURE with USDC on (Arc) 1`] = `
             "application/json",
           ],
           [
-            "payment-response",
-            "eyJzdWNjZXNzIjp0cnVlLCJ0cmFuc2FjdGlvbiI6IjB4dXNkY3NldHRsZWQiLCJuZXR3b3JrIjoiYmFzZSJ9",
-          ],
-          [
-            "x-payment-response",
-            "eyJzdWNjZXNzIjp0cnVlLCJ0cmFuc2FjdGlvbiI6IjB4dXNkY3NldHRsZWQiLCJuZXR3b3JrIjoiYmFzZSJ9",
+            "payment-required",
+            "<<PAYMENT_REQUIRED_BASE_ARC>>",
           ],
         ],
-        "status": 200,
+        "status": 402,
         "statusText": "",
       },
       "url": "https://untrusted-request-host.example/api/consult?q=hello",
@@ -4222,23 +4078,13 @@ exports[`3. paid pre-checks > empty PAYMENT-SIGNATURE with USDC on (Arc) 1`] = `
     "▶ request",
     "fetch discovery",
     "fetch requirements",
-    "fetch relayVerify",
-    "selectedAdapter",
-    "adapter",
-    "fetch relaySettle",
   ],
 }
 `;
 
 exports[`3. paid pre-checks > empty PAYMENT-SIGNATURE with USDC on (Base) 1`] = `
 {
-  "adapterCalls": [
-    [
-      {
-        "q": "hello",
-      },
-    ],
-  ],
+  "adapterCalls": [],
   "consoleErrors": [],
   "fetches": [
     {
@@ -4257,32 +4103,6 @@ exports[`3. paid pre-checks > empty PAYMENT-SIGNATURE with USDC on (Base) 1`] = 
       "method": "GET",
       "url": "https://open-pay.jp/api/x402/relay/requirements?resourceId=resource-id",
     },
-    {
-      "body": "{"resourceId":"resource-id","paymentRequirements":<<USDC_V1_ACCEPT>>,"paymentSignatureHeader":""}",
-      "cache": null,
-      "hasSignal": true,
-      "headers": {
-        "content-type": "application/json",
-      },
-      "method": "POST",
-      "otherInit": {
-        "redirect": "manual",
-      },
-      "url": "https://open-pay.jp/api/x402/relay/verify",
-    },
-    {
-      "body": "{"resourceId":"resource-id","paymentRequirements":<<USDC_V1_ACCEPT>>,"paymentSignatureHeader":""}",
-      "cache": null,
-      "hasSignal": true,
-      "headers": {
-        "content-type": "application/json",
-      },
-      "method": "POST",
-      "otherInit": {
-        "redirect": "manual",
-      },
-      "url": "https://open-pay.jp/api/x402/relay/settle",
-    },
   ],
   "requests": [
     {
@@ -4292,7 +4112,7 @@ exports[`3. paid pre-checks > empty PAYMENT-SIGNATURE with USDC on (Base) 1`] = 
       },
       "label": "request",
       "response": {
-        "body": "{"answer":"answer"}",
+        "body": "{"x402Version":1,"accepts":[<<JPYC_ACCEPT>>,<<USDC_V1_ACCEPT>>],"error":"invalid_payment_payload"}",
         "headers": [
           [
             "cache-control",
@@ -4303,15 +4123,11 @@ exports[`3. paid pre-checks > empty PAYMENT-SIGNATURE with USDC on (Base) 1`] = 
             "application/json",
           ],
           [
-            "payment-response",
-            "eyJzdWNjZXNzIjp0cnVlLCJ0cmFuc2FjdGlvbiI6IjB4dXNkY3NldHRsZWQiLCJuZXR3b3JrIjoiYmFzZSJ9",
-          ],
-          [
-            "x-payment-response",
-            "eyJzdWNjZXNzIjp0cnVlLCJ0cmFuc2FjdGlvbiI6IjB4dXNkY3NldHRsZWQiLCJuZXR3b3JrIjoiYmFzZSJ9",
+            "payment-required",
+            "<<PAYMENT_REQUIRED_BASE>>",
           ],
         ],
-        "status": 200,
+        "status": 402,
         "statusText": "",
       },
       "url": "https://untrusted-request-host.example/api/consult?q=hello",
@@ -4321,10 +4137,6 @@ exports[`3. paid pre-checks > empty PAYMENT-SIGNATURE with USDC on (Base) 1`] = 
     "▶ request",
     "fetch discovery",
     "fetch requirements",
-    "fetch relayVerify",
-    "selectedAdapter",
-    "adapter",
-    "fetch relaySettle",
   ],
 }
 `;
@@ -4539,6 +4351,12 @@ exports[`4. JPYC purchase, USDC arc > success 1`] = `
       "url": "https://open-pay.jp/api/facilitator/settle",
     },
   ],
+  "otherConsole": [
+    [
+      "warn",
+      "[openpay-x402] verify ok without reservation token (jpyc)",
+    ],
+  ],
   "requests": [
     {
       "at": "+0:00.000",
@@ -4573,6 +4391,7 @@ exports[`4. JPYC purchase, USDC arc > success 1`] = `
     "fetch discovery",
     "fetch requirements",
     "fetch facilitatorVerify",
+    "console.warn",
     "selectedAdapter",
     "adapter",
     "fetch facilitatorSettle",
@@ -4698,6 +4517,12 @@ exports[`4. JPYC purchase, USDC base > adapter rejects 1`] = `
       "url": "https://open-pay.jp/api/facilitator/verify",
     },
   ],
+  "otherConsole": [
+    [
+      "warn",
+      "[openpay-x402] verify ok without reservation token (jpyc)",
+    ],
+  ],
   "requests": [
     {
       "at": "+0:00.000",
@@ -4728,6 +4553,7 @@ exports[`4. JPYC purchase, USDC base > adapter rejects 1`] = `
     "fetch discovery",
     "fetch requirements",
     "fetch facilitatorVerify",
+    "console.warn",
     "selectedAdapter",
     "adapter",
     "console.error",
@@ -4789,6 +4615,12 @@ exports[`4. JPYC purchase, USDC base > settle success false with errorReason 1`]
       "url": "https://open-pay.jp/api/facilitator/settle",
     },
   ],
+  "otherConsole": [
+    [
+      "warn",
+      "[openpay-x402] verify ok without reservation token (jpyc)",
+    ],
+  ],
   "requests": [
     {
       "at": "+0:00.000",
@@ -4823,6 +4655,7 @@ exports[`4. JPYC purchase, USDC base > settle success false with errorReason 1`]
     "fetch discovery",
     "fetch requirements",
     "fetch facilitatorVerify",
+    "console.warn",
     "selectedAdapter",
     "adapter",
     "fetch facilitatorSettle",
@@ -4884,6 +4717,12 @@ exports[`4. JPYC purchase, USDC base > success 1`] = `
       "url": "https://open-pay.jp/api/facilitator/settle",
     },
   ],
+  "otherConsole": [
+    [
+      "warn",
+      "[openpay-x402] verify ok without reservation token (jpyc)",
+    ],
+  ],
   "requests": [
     {
       "at": "+0:00.000",
@@ -4918,6 +4757,7 @@ exports[`4. JPYC purchase, USDC base > success 1`] = `
     "fetch discovery",
     "fetch requirements",
     "fetch facilitatorVerify",
+    "console.warn",
     "selectedAdapter",
     "adapter",
     "fetch facilitatorSettle",
@@ -5109,6 +4949,12 @@ exports[`4. JPYC purchase, USDC off > adapter rejects 1`] = `
       "url": "https://open-pay.jp/api/facilitator/verify",
     },
   ],
+  "otherConsole": [
+    [
+      "warn",
+      "[openpay-x402] verify ok without reservation token (jpyc)",
+    ],
+  ],
   "requests": [
     {
       "at": "+0:00.000",
@@ -5138,6 +4984,7 @@ exports[`4. JPYC purchase, USDC off > adapter rejects 1`] = `
     "▶ request",
     "fetch discovery",
     "fetch facilitatorVerify",
+    "console.warn",
     "selectedAdapter",
     "adapter",
     "console.error",
@@ -5182,6 +5029,12 @@ exports[`4. JPYC purchase, USDC off > adapter returns a BigInt 1`] = `
       "url": "https://open-pay.jp/api/facilitator/verify",
     },
   ],
+  "otherConsole": [
+    [
+      "warn",
+      "[openpay-x402] verify ok without reservation token (jpyc)",
+    ],
+  ],
   "requests": [
     {
       "at": "+0:00.000",
@@ -5211,6 +5064,7 @@ exports[`4. JPYC purchase, USDC off > adapter returns a BigInt 1`] = `
     "▶ request",
     "fetch discovery",
     "fetch facilitatorVerify",
+    "console.warn",
     "selectedAdapter",
     "adapter",
     "console.error",
@@ -5264,6 +5118,12 @@ exports[`4. JPYC purchase, USDC off > adapter returns null 1`] = `
       "url": "https://open-pay.jp/api/facilitator/settle",
     },
   ],
+  "otherConsole": [
+    [
+      "warn",
+      "[openpay-x402] verify ok without reservation token (jpyc)",
+    ],
+  ],
   "requests": [
     {
       "at": "+0:00.000",
@@ -5297,6 +5157,7 @@ exports[`4. JPYC purchase, USDC off > adapter returns null 1`] = `
     "▶ request",
     "fetch discovery",
     "fetch facilitatorVerify",
+    "console.warn",
     "selectedAdapter",
     "adapter",
     "fetch facilitatorSettle",
@@ -5341,6 +5202,12 @@ exports[`4. JPYC purchase, USDC off > adapter returns undefined 1`] = `
       "url": "https://open-pay.jp/api/facilitator/verify",
     },
   ],
+  "otherConsole": [
+    [
+      "warn",
+      "[openpay-x402] verify ok without reservation token (jpyc)",
+    ],
+  ],
   "requests": [
     {
       "at": "+0:00.000",
@@ -5370,6 +5237,7 @@ exports[`4. JPYC purchase, USDC off > adapter returns undefined 1`] = `
     "▶ request",
     "fetch discovery",
     "fetch facilitatorVerify",
+    "console.warn",
     "selectedAdapter",
     "adapter",
     "console.error",
@@ -5423,6 +5291,12 @@ exports[`4. JPYC purchase, USDC off > listing with two accepts pays accepts[0] 1
       "url": "https://open-pay.jp/api/facilitator/settle",
     },
   ],
+  "otherConsole": [
+    [
+      "warn",
+      "[openpay-x402] verify ok without reservation token (jpyc)",
+    ],
+  ],
   "requests": [
     {
       "at": "+0:00.000",
@@ -5456,6 +5330,7 @@ exports[`4. JPYC purchase, USDC off > listing with two accepts pays accepts[0] 1
     "▶ request",
     "fetch discovery",
     "fetch facilitatorVerify",
+    "console.warn",
     "selectedAdapter",
     "adapter",
     "fetch facilitatorSettle",
@@ -5509,6 +5384,12 @@ exports[`4. JPYC purchase, USDC off > q needing encoding 1`] = `
       "url": "https://open-pay.jp/api/facilitator/settle",
     },
   ],
+  "otherConsole": [
+    [
+      "warn",
+      "[openpay-x402] verify ok without reservation token (jpyc)",
+    ],
+  ],
   "requests": [
     {
       "at": "+0:00.000",
@@ -5542,6 +5423,7 @@ exports[`4. JPYC purchase, USDC off > q needing encoding 1`] = `
     "▶ request",
     "fetch discovery",
     "fetch facilitatorVerify",
+    "console.warn",
     "selectedAdapter",
     "adapter",
     "fetch facilitatorSettle",
@@ -5580,6 +5462,12 @@ exports[`4. JPYC purchase, USDC off > selectedAdapter throws 1`] = `
       "url": "https://open-pay.jp/api/facilitator/verify",
     },
   ],
+  "otherConsole": [
+    [
+      "warn",
+      "[openpay-x402] verify ok without reservation token (jpyc)",
+    ],
+  ],
   "requests": [
     {
       "at": "+0:00.000",
@@ -5609,6 +5497,7 @@ exports[`4. JPYC purchase, USDC off > selectedAdapter throws 1`] = `
     "▶ request",
     "fetch discovery",
     "fetch facilitatorVerify",
+    "console.warn",
     "selectedAdapter",
     "console.error",
   ],
@@ -5665,6 +5554,12 @@ exports[`4. JPYC purchase, USDC off > settle body JSON null 1`] = `
       "url": "https://open-pay.jp/api/facilitator/settle",
     },
   ],
+  "otherConsole": [
+    [
+      "warn",
+      "[openpay-x402] verify ok without reservation token (jpyc)",
+    ],
+  ],
   "requests": [
     {
       "at": "+0:00.000",
@@ -5694,6 +5589,7 @@ exports[`4. JPYC purchase, USDC off > settle body JSON null 1`] = `
     "▶ request",
     "fetch discovery",
     "fetch facilitatorVerify",
+    "console.warn",
     "selectedAdapter",
     "adapter",
     "fetch facilitatorSettle",
@@ -5752,6 +5648,12 @@ exports[`4. JPYC purchase, USDC off > settle fetch throws 1`] = `
       "url": "https://open-pay.jp/api/facilitator/settle",
     },
   ],
+  "otherConsole": [
+    [
+      "warn",
+      "[openpay-x402] verify ok without reservation token (jpyc)",
+    ],
+  ],
   "requests": [
     {
       "at": "+0:00.000",
@@ -5781,6 +5683,7 @@ exports[`4. JPYC purchase, USDC off > settle fetch throws 1`] = `
     "▶ request",
     "fetch discovery",
     "fetch facilitatorVerify",
+    "console.warn",
     "selectedAdapter",
     "adapter",
     "fetch facilitatorSettle",
@@ -5839,6 +5742,12 @@ exports[`4. JPYC purchase, USDC off > settle non-JSON body 1`] = `
       "url": "https://open-pay.jp/api/facilitator/settle",
     },
   ],
+  "otherConsole": [
+    [
+      "warn",
+      "[openpay-x402] verify ok without reservation token (jpyc)",
+    ],
+  ],
   "requests": [
     {
       "at": "+0:00.000",
@@ -5868,6 +5777,7 @@ exports[`4. JPYC purchase, USDC off > settle non-JSON body 1`] = `
     "▶ request",
     "fetch discovery",
     "fetch facilitatorVerify",
+    "console.warn",
     "selectedAdapter",
     "adapter",
     "fetch facilitatorSettle",
@@ -5922,6 +5832,12 @@ exports[`4. JPYC purchase, USDC off > settle success false with errorReason 1`] 
       "url": "https://open-pay.jp/api/facilitator/settle",
     },
   ],
+  "otherConsole": [
+    [
+      "warn",
+      "[openpay-x402] verify ok without reservation token (jpyc)",
+    ],
+  ],
   "requests": [
     {
       "at": "+0:00.000",
@@ -5951,6 +5867,7 @@ exports[`4. JPYC purchase, USDC off > settle success false with errorReason 1`] 
     "▶ request",
     "fetch discovery",
     "fetch facilitatorVerify",
+    "console.warn",
     "selectedAdapter",
     "adapter",
     "fetch facilitatorSettle",
@@ -6004,6 +5921,12 @@ exports[`4. JPYC purchase, USDC off > settle success false without errorReason 1
       "url": "https://open-pay.jp/api/facilitator/settle",
     },
   ],
+  "otherConsole": [
+    [
+      "warn",
+      "[openpay-x402] verify ok without reservation token (jpyc)",
+    ],
+  ],
   "requests": [
     {
       "at": "+0:00.000",
@@ -6033,6 +5956,7 @@ exports[`4. JPYC purchase, USDC off > settle success false without errorReason 1
     "▶ request",
     "fetch discovery",
     "fetch facilitatorVerify",
+    "console.warn",
     "selectedAdapter",
     "adapter",
     "fetch facilitatorSettle",
@@ -6086,6 +6010,12 @@ exports[`4. JPYC purchase, USDC off > success 1`] = `
       "url": "https://open-pay.jp/api/facilitator/settle",
     },
   ],
+  "otherConsole": [
+    [
+      "warn",
+      "[openpay-x402] verify ok without reservation token (jpyc)",
+    ],
+  ],
   "requests": [
     {
       "at": "+0:00.000",
@@ -6119,6 +6049,7 @@ exports[`4. JPYC purchase, USDC off > success 1`] = `
     "▶ request",
     "fetch discovery",
     "fetch facilitatorVerify",
+    "console.warn",
     "selectedAdapter",
     "adapter",
     "fetch facilitatorSettle",
@@ -11426,7 +11357,7 @@ exports[`5b. USDC rail selection > Arc payment with an unpadded PAYMENT-SIGNATUR
       "url": "https://open-pay.jp/api/x402/relay/requirements?resourceId=resource-id",
     },
     {
-      "body": "{"resourceId":"resource-id","paymentRequirements":<<ARC_V2_ACCEPT>>,"paymentSignatureHeader":"eyJ4NDAyVmVyc2lvbiI6MiwiYWNjZXB0ZWQiOnsic2NoZW1lIjoiZXhhY3QiLCJuZXR3b3JrIjoiZWlwMTU1OjUwNDIiLCJhbW91bnQiOiIxMDAwMDAwIiwiYXNzZXQiOiIweDM2MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAiLCJwYXlUbyI6IjB4Y2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZCIsIm1heFRpbWVvdXRTZWNvbmRzIjo2MDQ5MDAsImV4dHJhIjp7Im5hbWUiOiJHYXRld2F5V2FsbGV0QmF0Y2hlZCIsInZlcnNpb24iOiIxIiwidmVyaWZ5aW5nQ29udHJhY3QiOiIweDc3Nzc3Nzc3RGNjNGQ1QThCNkU0MThGZDA0RDg5OTdlZjExMDAwZUUifX0sInBheWxvYWQiOnsic2lnbmF0dXJlIjoiMHgwMCIsImZpbGxlciI6IiJ9fQ"}",
+      "body": "{"resourceId":"resource-id","paymentRequirements":<<ARC_V2_ACCEPT>>,"paymentSignatureHeader":"eyJ4NDAyVmVyc2lvbiI6MiwiYWNjZXB0ZWQiOnsic2NoZW1lIjoiZXhhY3QiLCJuZXR3b3JrIjoiZWlwMTU1OjUwNDIiLCJhbW91bnQiOiIxMDAwMDAwIiwiYXNzZXQiOiIweDM2MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAiLCJwYXlUbyI6IjB4Y2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZCIsIm1heFRpbWVvdXRTZWNvbmRzIjo2MDQ5MDAsImV4dHJhIjp7Im5hbWUiOiJHYXRld2F5V2FsbGV0QmF0Y2hlZCIsInZlcnNpb24iOiIxIiwidmVyaWZ5aW5nQ29udHJhY3QiOiIweDc3Nzc3Nzc3RGNjNGQ1QThCNkU0MThGZDA0RDg5OTdlZjExMDAwZUUifX0sInBheWxvYWQiOnsiYXV0aG9yaXphdGlvbiI6eyJmcm9tIjoiMHgzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzIiwidG8iOiIweGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2QiLCJ2YWx1ZSI6IjEwMDAwMDAiLCJ2YWxpZEFmdGVyIjoiMCIsInZhbGlkQmVmb3JlIjoiNDEwMjQ0NDgwMCIsIm5vbmNlIjoiMHgwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAyMDAxIn0sInNpZ25hdHVyZSI6IjB4MDAiLCJmaWxsZXIiOiIifX0"}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -11439,7 +11370,7 @@ exports[`5b. USDC rail selection > Arc payment with an unpadded PAYMENT-SIGNATUR
       "url": "https://open-pay.jp/api/x402/relay/verify",
     },
     {
-      "body": "{"resourceId":"resource-id","paymentRequirements":<<ARC_V2_ACCEPT>>,"paymentSignatureHeader":"eyJ4NDAyVmVyc2lvbiI6MiwiYWNjZXB0ZWQiOnsic2NoZW1lIjoiZXhhY3QiLCJuZXR3b3JrIjoiZWlwMTU1OjUwNDIiLCJhbW91bnQiOiIxMDAwMDAwIiwiYXNzZXQiOiIweDM2MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAiLCJwYXlUbyI6IjB4Y2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZCIsIm1heFRpbWVvdXRTZWNvbmRzIjo2MDQ5MDAsImV4dHJhIjp7Im5hbWUiOiJHYXRld2F5V2FsbGV0QmF0Y2hlZCIsInZlcnNpb24iOiIxIiwidmVyaWZ5aW5nQ29udHJhY3QiOiIweDc3Nzc3Nzc3RGNjNGQ1QThCNkU0MThGZDA0RDg5OTdlZjExMDAwZUUifX0sInBheWxvYWQiOnsic2lnbmF0dXJlIjoiMHgwMCIsImZpbGxlciI6IiJ9fQ"}",
+      "body": "{"resourceId":"resource-id","paymentRequirements":<<ARC_V2_ACCEPT>>,"paymentSignatureHeader":"eyJ4NDAyVmVyc2lvbiI6MiwiYWNjZXB0ZWQiOnsic2NoZW1lIjoiZXhhY3QiLCJuZXR3b3JrIjoiZWlwMTU1OjUwNDIiLCJhbW91bnQiOiIxMDAwMDAwIiwiYXNzZXQiOiIweDM2MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAiLCJwYXlUbyI6IjB4Y2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZCIsIm1heFRpbWVvdXRTZWNvbmRzIjo2MDQ5MDAsImV4dHJhIjp7Im5hbWUiOiJHYXRld2F5V2FsbGV0QmF0Y2hlZCIsInZlcnNpb24iOiIxIiwidmVyaWZ5aW5nQ29udHJhY3QiOiIweDc3Nzc3Nzc3RGNjNGQ1QThCNkU0MThGZDA0RDg5OTdlZjExMDAwZUUifX0sInBheWxvYWQiOnsiYXV0aG9yaXphdGlvbiI6eyJmcm9tIjoiMHgzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzIiwidG8iOiIweGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2QiLCJ2YWx1ZSI6IjEwMDAwMDAiLCJ2YWxpZEFmdGVyIjoiMCIsInZhbGlkQmVmb3JlIjoiNDEwMjQ0NDgwMCIsIm5vbmNlIjoiMHgwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAyMDAxIn0sInNpZ25hdHVyZSI6IjB4MDAiLCJmaWxsZXIiOiIifX0"}",
       "cache": null,
       "hasSignal": true,
       "headers": {
@@ -11456,7 +11387,7 @@ exports[`5b. USDC rail selection > Arc payment with an unpadded PAYMENT-SIGNATUR
     {
       "at": "+0:00.000",
       "headers": {
-        "PAYMENT-SIGNATURE": "eyJ4NDAyVmVyc2lvbiI6MiwiYWNjZXB0ZWQiOnsic2NoZW1lIjoiZXhhY3QiLCJuZXR3b3JrIjoiZWlwMTU1OjUwNDIiLCJhbW91bnQiOiIxMDAwMDAwIiwiYXNzZXQiOiIweDM2MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAiLCJwYXlUbyI6IjB4Y2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZCIsIm1heFRpbWVvdXRTZWNvbmRzIjo2MDQ5MDAsImV4dHJhIjp7Im5hbWUiOiJHYXRld2F5V2FsbGV0QmF0Y2hlZCIsInZlcnNpb24iOiIxIiwidmVyaWZ5aW5nQ29udHJhY3QiOiIweDc3Nzc3Nzc3RGNjNGQ1QThCNkU0MThGZDA0RDg5OTdlZjExMDAwZUUifX0sInBheWxvYWQiOnsic2lnbmF0dXJlIjoiMHgwMCIsImZpbGxlciI6IiJ9fQ",
+        "PAYMENT-SIGNATURE": "eyJ4NDAyVmVyc2lvbiI6MiwiYWNjZXB0ZWQiOnsic2NoZW1lIjoiZXhhY3QiLCJuZXR3b3JrIjoiZWlwMTU1OjUwNDIiLCJhbW91bnQiOiIxMDAwMDAwIiwiYXNzZXQiOiIweDM2MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAiLCJwYXlUbyI6IjB4Y2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZCIsIm1heFRpbWVvdXRTZWNvbmRzIjo2MDQ5MDAsImV4dHJhIjp7Im5hbWUiOiJHYXRld2F5V2FsbGV0QmF0Y2hlZCIsInZlcnNpb24iOiIxIiwidmVyaWZ5aW5nQ29udHJhY3QiOiIweDc3Nzc3Nzc3RGNjNGQ1QThCNkU0MThGZDA0RDg5OTdlZjExMDAwZUUifX0sInBheWxvYWQiOnsiYXV0aG9yaXphdGlvbiI6eyJmcm9tIjoiMHgzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzIiwidG8iOiIweGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2QiLCJ2YWx1ZSI6IjEwMDAwMDAiLCJ2YWxpZEFmdGVyIjoiMCIsInZhbGlkQmVmb3JlIjoiNDEwMjQ0NDgwMCIsIm5vbmNlIjoiMHgwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAyMDAxIn0sInNpZ25hdHVyZSI6IjB4MDAiLCJmaWxsZXIiOiIifX0",
       },
       "label": "request",
       "response": {
@@ -11792,13 +11723,7 @@ exports[`5b. USDC rail selection > Base v2 payment while the Arc face is served 
 
 exports[`5b. USDC rail selection > unparseable PAYMENT-SIGNATURE while the Arc face is served 1`] = `
 {
-  "adapterCalls": [
-    [
-      {
-        "q": "hello",
-      },
-    ],
-  ],
+  "adapterCalls": [],
   "consoleErrors": [],
   "fetches": [
     {
@@ -11817,32 +11742,6 @@ exports[`5b. USDC rail selection > unparseable PAYMENT-SIGNATURE while the Arc f
       "method": "GET",
       "url": "https://open-pay.jp/api/x402/relay/requirements?resourceId=resource-id",
     },
-    {
-      "body": "{"resourceId":"resource-id","paymentRequirements":<<USDC_V1_ACCEPT>>,"paymentSignatureHeader":"raw-signature"}",
-      "cache": null,
-      "hasSignal": true,
-      "headers": {
-        "content-type": "application/json",
-      },
-      "method": "POST",
-      "otherInit": {
-        "redirect": "manual",
-      },
-      "url": "https://open-pay.jp/api/x402/relay/verify",
-    },
-    {
-      "body": "{"resourceId":"resource-id","paymentRequirements":<<USDC_V1_ACCEPT>>,"paymentSignatureHeader":"raw-signature"}",
-      "cache": null,
-      "hasSignal": true,
-      "headers": {
-        "content-type": "application/json",
-      },
-      "method": "POST",
-      "otherInit": {
-        "redirect": "manual",
-      },
-      "url": "https://open-pay.jp/api/x402/relay/settle",
-    },
   ],
   "requests": [
     {
@@ -11852,7 +11751,7 @@ exports[`5b. USDC rail selection > unparseable PAYMENT-SIGNATURE while the Arc f
       },
       "label": "request",
       "response": {
-        "body": "{"answer":"answer"}",
+        "body": "{"x402Version":1,"accepts":[<<JPYC_ACCEPT>>,<<USDC_V1_ACCEPT>>],"error":"invalid_payment_payload"}",
         "headers": [
           [
             "cache-control",
@@ -11863,15 +11762,11 @@ exports[`5b. USDC rail selection > unparseable PAYMENT-SIGNATURE while the Arc f
             "application/json",
           ],
           [
-            "payment-response",
-            "eyJzdWNjZXNzIjp0cnVlLCJ0cmFuc2FjdGlvbiI6IjB4dXNkY3NldHRsZWQiLCJuZXR3b3JrIjoiYmFzZSJ9",
-          ],
-          [
-            "x-payment-response",
-            "eyJzdWNjZXNzIjp0cnVlLCJ0cmFuc2FjdGlvbiI6IjB4dXNkY3NldHRsZWQiLCJuZXR3b3JrIjoiYmFzZSJ9",
+            "payment-required",
+            "<<PAYMENT_REQUIRED_BASE_ARC>>",
           ],
         ],
-        "status": 200,
+        "status": 402,
         "statusText": "",
       },
       "url": "https://untrusted-request-host.example/api/consult?q=hello",
@@ -11881,10 +11776,6 @@ exports[`5b. USDC rail selection > unparseable PAYMENT-SIGNATURE while the Arc f
     "▶ request",
     "fetch discovery",
     "fetch requirements",
-    "fetch relayVerify",
-    "selectedAdapter",
-    "adapter",
-    "fetch relaySettle",
   ],
 }
 `;
@@ -11939,6 +11830,12 @@ exports[`6. status vs body > facilitatorSettle HTTP 202 with a failure-shaped bo
       "url": "https://open-pay.jp/api/facilitator/settle",
     },
   ],
+  "otherConsole": [
+    [
+      "warn",
+      "[openpay-x402] verify ok without reservation token (jpyc)",
+    ],
+  ],
   "requests": [
     {
       "at": "+0:00.000",
@@ -11972,6 +11869,7 @@ exports[`6. status vs body > facilitatorSettle HTTP 202 with a failure-shaped bo
     "▶ request",
     "fetch discovery",
     "fetch facilitatorVerify",
+    "console.warn",
     "selectedAdapter",
     "adapter",
     "fetch facilitatorSettle",
@@ -12030,6 +11928,12 @@ exports[`6. status vs body > facilitatorSettle HTTP 202 with a success-shaped bo
       "url": "https://open-pay.jp/api/facilitator/settle",
     },
   ],
+  "otherConsole": [
+    [
+      "warn",
+      "[openpay-x402] verify ok without reservation token (jpyc)",
+    ],
+  ],
   "requests": [
     {
       "at": "+0:00.000",
@@ -12063,6 +11967,7 @@ exports[`6. status vs body > facilitatorSettle HTTP 202 with a success-shaped bo
     "▶ request",
     "fetch discovery",
     "fetch facilitatorVerify",
+    "console.warn",
     "selectedAdapter",
     "adapter",
     "fetch facilitatorSettle",
@@ -12117,6 +12022,12 @@ exports[`6. status vs body > facilitatorSettle HTTP 400 with a failure-shaped bo
       "url": "https://open-pay.jp/api/facilitator/settle",
     },
   ],
+  "otherConsole": [
+    [
+      "warn",
+      "[openpay-x402] verify ok without reservation token (jpyc)",
+    ],
+  ],
   "requests": [
     {
       "at": "+0:00.000",
@@ -12146,6 +12057,7 @@ exports[`6. status vs body > facilitatorSettle HTTP 400 with a failure-shaped bo
     "▶ request",
     "fetch discovery",
     "fetch facilitatorVerify",
+    "console.warn",
     "selectedAdapter",
     "adapter",
     "fetch facilitatorSettle",
@@ -12199,6 +12111,12 @@ exports[`6. status vs body > facilitatorSettle HTTP 400 with a success-shaped bo
       "url": "https://open-pay.jp/api/facilitator/settle",
     },
   ],
+  "otherConsole": [
+    [
+      "warn",
+      "[openpay-x402] verify ok without reservation token (jpyc)",
+    ],
+  ],
   "requests": [
     {
       "at": "+0:00.000",
@@ -12228,6 +12146,7 @@ exports[`6. status vs body > facilitatorSettle HTTP 400 with a success-shaped bo
     "▶ request",
     "fetch discovery",
     "fetch facilitatorVerify",
+    "console.warn",
     "selectedAdapter",
     "adapter",
     "fetch facilitatorSettle",
@@ -12281,6 +12200,12 @@ exports[`6. status vs body > facilitatorSettle HTTP 429 with a failure-shaped bo
       "url": "https://open-pay.jp/api/facilitator/settle",
     },
   ],
+  "otherConsole": [
+    [
+      "warn",
+      "[openpay-x402] verify ok without reservation token (jpyc)",
+    ],
+  ],
   "requests": [
     {
       "at": "+0:00.000",
@@ -12310,6 +12235,7 @@ exports[`6. status vs body > facilitatorSettle HTTP 429 with a failure-shaped bo
     "▶ request",
     "fetch discovery",
     "fetch facilitatorVerify",
+    "console.warn",
     "selectedAdapter",
     "adapter",
     "fetch facilitatorSettle",
@@ -12363,6 +12289,12 @@ exports[`6. status vs body > facilitatorSettle HTTP 429 with a success-shaped bo
       "url": "https://open-pay.jp/api/facilitator/settle",
     },
   ],
+  "otherConsole": [
+    [
+      "warn",
+      "[openpay-x402] verify ok without reservation token (jpyc)",
+    ],
+  ],
   "requests": [
     {
       "at": "+0:00.000",
@@ -12392,6 +12324,7 @@ exports[`6. status vs body > facilitatorSettle HTTP 429 with a success-shaped bo
     "▶ request",
     "fetch discovery",
     "fetch facilitatorVerify",
+    "console.warn",
     "selectedAdapter",
     "adapter",
     "fetch facilitatorSettle",
@@ -12449,6 +12382,12 @@ exports[`6. status vs body > facilitatorSettle HTTP 500 with a failure-shaped bo
       "url": "https://open-pay.jp/api/facilitator/settle",
     },
   ],
+  "otherConsole": [
+    [
+      "warn",
+      "[openpay-x402] verify ok without reservation token (jpyc)",
+    ],
+  ],
   "requests": [
     {
       "at": "+0:00.000",
@@ -12478,6 +12417,7 @@ exports[`6. status vs body > facilitatorSettle HTTP 500 with a failure-shaped bo
     "▶ request",
     "fetch discovery",
     "fetch facilitatorVerify",
+    "console.warn",
     "selectedAdapter",
     "adapter",
     "fetch facilitatorSettle",
@@ -12536,6 +12476,12 @@ exports[`6. status vs body > facilitatorSettle HTTP 500 with a success-shaped bo
       "url": "https://open-pay.jp/api/facilitator/settle",
     },
   ],
+  "otherConsole": [
+    [
+      "warn",
+      "[openpay-x402] verify ok without reservation token (jpyc)",
+    ],
+  ],
   "requests": [
     {
       "at": "+0:00.000",
@@ -12565,6 +12511,7 @@ exports[`6. status vs body > facilitatorSettle HTTP 500 with a success-shaped bo
     "▶ request",
     "fetch discovery",
     "fetch facilitatorVerify",
+    "console.warn",
     "selectedAdapter",
     "adapter",
     "fetch facilitatorSettle",
@@ -12623,6 +12570,12 @@ exports[`6. status vs body > facilitatorSettle HTTP 503 with a failure-shaped bo
       "url": "https://open-pay.jp/api/facilitator/settle",
     },
   ],
+  "otherConsole": [
+    [
+      "warn",
+      "[openpay-x402] verify ok without reservation token (jpyc)",
+    ],
+  ],
   "requests": [
     {
       "at": "+0:00.000",
@@ -12652,6 +12605,7 @@ exports[`6. status vs body > facilitatorSettle HTTP 503 with a failure-shaped bo
     "▶ request",
     "fetch discovery",
     "fetch facilitatorVerify",
+    "console.warn",
     "selectedAdapter",
     "adapter",
     "fetch facilitatorSettle",
@@ -12710,6 +12664,12 @@ exports[`6. status vs body > facilitatorSettle HTTP 503 with a success-shaped bo
       "url": "https://open-pay.jp/api/facilitator/settle",
     },
   ],
+  "otherConsole": [
+    [
+      "warn",
+      "[openpay-x402] verify ok without reservation token (jpyc)",
+    ],
+  ],
   "requests": [
     {
       "at": "+0:00.000",
@@ -12739,6 +12699,7 @@ exports[`6. status vs body > facilitatorSettle HTTP 503 with a success-shaped bo
     "▶ request",
     "fetch discovery",
     "fetch facilitatorVerify",
+    "console.warn",
     "selectedAdapter",
     "adapter",
     "fetch facilitatorSettle",
@@ -15147,6 +15108,12 @@ exports[`7. odd verify / settle bodies > JPYC settle body "ok" 1`] = `
       "url": "https://open-pay.jp/api/facilitator/settle",
     },
   ],
+  "otherConsole": [
+    [
+      "warn",
+      "[openpay-x402] verify ok without reservation token (jpyc)",
+    ],
+  ],
   "requests": [
     {
       "at": "+0:00.000",
@@ -15176,6 +15143,7 @@ exports[`7. odd verify / settle bodies > JPYC settle body "ok" 1`] = `
     "▶ request",
     "fetch discovery",
     "fetch facilitatorVerify",
+    "console.warn",
     "selectedAdapter",
     "adapter",
     "fetch facilitatorSettle",
@@ -15234,6 +15202,12 @@ exports[`7. odd verify / settle bodies > JPYC settle body [] 1`] = `
       "url": "https://open-pay.jp/api/facilitator/settle",
     },
   ],
+  "otherConsole": [
+    [
+      "warn",
+      "[openpay-x402] verify ok without reservation token (jpyc)",
+    ],
+  ],
   "requests": [
     {
       "at": "+0:00.000",
@@ -15263,6 +15237,7 @@ exports[`7. odd verify / settle bodies > JPYC settle body [] 1`] = `
     "▶ request",
     "fetch discovery",
     "fetch facilitatorVerify",
+    "console.warn",
     "selectedAdapter",
     "adapter",
     "fetch facilitatorSettle",
@@ -15321,6 +15296,12 @@ exports[`7. odd verify / settle bodies > JPYC settle body 42 1`] = `
       "url": "https://open-pay.jp/api/facilitator/settle",
     },
   ],
+  "otherConsole": [
+    [
+      "warn",
+      "[openpay-x402] verify ok without reservation token (jpyc)",
+    ],
+  ],
   "requests": [
     {
       "at": "+0:00.000",
@@ -15350,6 +15331,7 @@ exports[`7. odd verify / settle bodies > JPYC settle body 42 1`] = `
     "▶ request",
     "fetch discovery",
     "fetch facilitatorVerify",
+    "console.warn",
     "selectedAdapter",
     "adapter",
     "fetch facilitatorSettle",
@@ -15408,6 +15390,12 @@ exports[`7. odd verify / settle bodies > JPYC settle body true 1`] = `
       "url": "https://open-pay.jp/api/facilitator/settle",
     },
   ],
+  "otherConsole": [
+    [
+      "warn",
+      "[openpay-x402] verify ok without reservation token (jpyc)",
+    ],
+  ],
   "requests": [
     {
       "at": "+0:00.000",
@@ -15437,6 +15425,7 @@ exports[`7. odd verify / settle bodies > JPYC settle body true 1`] = `
     "▶ request",
     "fetch discovery",
     "fetch facilitatorVerify",
+    "console.warn",
     "selectedAdapter",
     "adapter",
     "fetch facilitatorSettle",
@@ -15491,6 +15480,12 @@ exports[`7. odd verify / settle bodies > JPYC settle errorReason "" 1`] = `
       "url": "https://open-pay.jp/api/facilitator/settle",
     },
   ],
+  "otherConsole": [
+    [
+      "warn",
+      "[openpay-x402] verify ok without reservation token (jpyc)",
+    ],
+  ],
   "requests": [
     {
       "at": "+0:00.000",
@@ -15520,6 +15515,7 @@ exports[`7. odd verify / settle bodies > JPYC settle errorReason "" 1`] = `
     "▶ request",
     "fetch discovery",
     "fetch facilitatorVerify",
+    "console.warn",
     "selectedAdapter",
     "adapter",
     "fetch facilitatorSettle",
@@ -15573,6 +15569,12 @@ exports[`7. odd verify / settle bodies > JPYC settle errorReason {"a":1} 1`] = `
       "url": "https://open-pay.jp/api/facilitator/settle",
     },
   ],
+  "otherConsole": [
+    [
+      "warn",
+      "[openpay-x402] verify ok without reservation token (jpyc)",
+    ],
+  ],
   "requests": [
     {
       "at": "+0:00.000",
@@ -15602,6 +15604,7 @@ exports[`7. odd verify / settle bodies > JPYC settle errorReason {"a":1} 1`] = `
     "▶ request",
     "fetch discovery",
     "fetch facilitatorVerify",
+    "console.warn",
     "selectedAdapter",
     "adapter",
     "fetch facilitatorSettle",
@@ -15655,6 +15658,12 @@ exports[`7. odd verify / settle bodies > JPYC settle errorReason 0 1`] = `
       "url": "https://open-pay.jp/api/facilitator/settle",
     },
   ],
+  "otherConsole": [
+    [
+      "warn",
+      "[openpay-x402] verify ok without reservation token (jpyc)",
+    ],
+  ],
   "requests": [
     {
       "at": "+0:00.000",
@@ -15684,6 +15693,7 @@ exports[`7. odd verify / settle bodies > JPYC settle errorReason 0 1`] = `
     "▶ request",
     "fetch discovery",
     "fetch facilitatorVerify",
+    "console.warn",
     "selectedAdapter",
     "adapter",
     "fetch facilitatorSettle",
@@ -15737,6 +15747,12 @@ exports[`7. odd verify / settle bodies > JPYC settle errorReason a 200-character
       "url": "https://open-pay.jp/api/facilitator/settle",
     },
   ],
+  "otherConsole": [
+    [
+      "warn",
+      "[openpay-x402] verify ok without reservation token (jpyc)",
+    ],
+  ],
   "requests": [
     {
       "at": "+0:00.000",
@@ -15766,6 +15782,7 @@ exports[`7. odd verify / settle bodies > JPYC settle errorReason a 200-character
     "▶ request",
     "fetch discovery",
     "fetch facilitatorVerify",
+    "console.warn",
     "selectedAdapter",
     "adapter",
     "fetch facilitatorSettle",
@@ -15819,6 +15836,12 @@ exports[`7. odd verify / settle bodies > JPYC settle errorReason false 1`] = `
       "url": "https://open-pay.jp/api/facilitator/settle",
     },
   ],
+  "otherConsole": [
+    [
+      "warn",
+      "[openpay-x402] verify ok without reservation token (jpyc)",
+    ],
+  ],
   "requests": [
     {
       "at": "+0:00.000",
@@ -15848,6 +15871,7 @@ exports[`7. odd verify / settle bodies > JPYC settle errorReason false 1`] = `
     "▶ request",
     "fetch discovery",
     "fetch facilitatorVerify",
+    "console.warn",
     "selectedAdapter",
     "adapter",
     "fetch facilitatorSettle",
@@ -15901,6 +15925,12 @@ exports[`7. odd verify / settle bodies > JPYC settle errorReason null 1`] = `
       "url": "https://open-pay.jp/api/facilitator/settle",
     },
   ],
+  "otherConsole": [
+    [
+      "warn",
+      "[openpay-x402] verify ok without reservation token (jpyc)",
+    ],
+  ],
   "requests": [
     {
       "at": "+0:00.000",
@@ -15930,6 +15960,7 @@ exports[`7. odd verify / settle bodies > JPYC settle errorReason null 1`] = `
     "▶ request",
     "fetch discovery",
     "fetch facilitatorVerify",
+    "console.warn",
     "selectedAdapter",
     "adapter",
     "fetch facilitatorSettle",
@@ -18506,6 +18537,12 @@ exports[`8. cache tiers > a paid refetch restarts the unpaid 30-minute window 1`
       "url": "https://open-pay.jp/api/x402/relay/requirements?resourceId=resource-id",
     },
   ],
+  "otherConsole": [
+    [
+      "warn",
+      "[openpay-x402] verify ok without reservation token (jpyc)",
+    ],
+  ],
   "requests": [
     {
       "at": "+0:00.000",
@@ -18615,6 +18652,7 @@ exports[`8. cache tiers > a paid refetch restarts the unpaid 30-minute window 1`
     "fetch discovery",
     "fetch requirements",
     "fetch facilitatorVerify",
+    "console.warn",
     "selectedAdapter",
     "adapter",
     "fetch facilitatorSettle",
@@ -19569,6 +19607,16 @@ exports[`8. cache tiers > paid boundary (JPYC): 4:59.999 cached, 5:00.000 refetc
       "url": "https://open-pay.jp/api/facilitator/settle",
     },
   ],
+  "otherConsole": [
+    [
+      "warn",
+      "[openpay-x402] verify ok without reservation token (jpyc)",
+    ],
+    [
+      "warn",
+      "[openpay-x402] verify ok without reservation token (jpyc)",
+    ],
+  ],
   "requests": [
     {
       "at": "+0:00.000",
@@ -19655,6 +19703,7 @@ exports[`8. cache tiers > paid boundary (JPYC): 4:59.999 cached, 5:00.000 refetc
     "fetch requirements",
     "▶ paid at 4:59.999",
     "fetch facilitatorVerify",
+    "console.warn",
     "selectedAdapter",
     "adapter",
     "fetch facilitatorSettle",
@@ -19662,6 +19711,7 @@ exports[`8. cache tiers > paid boundary (JPYC): 4:59.999 cached, 5:00.000 refetc
     "fetch discovery",
     "fetch requirements",
     "fetch facilitatorVerify",
+    "console.warn",
     "selectedAdapter",
     "adapter",
     "fetch facilitatorSettle",
@@ -20132,6 +20182,12 @@ exports[`8. cache tiers > repriced listing: unpaid keeps the cached terms, paid 
       "url": "https://open-pay.jp/api/facilitator/settle",
     },
   ],
+  "otherConsole": [
+    [
+      "warn",
+      "[openpay-x402] verify ok without reservation token (jpyc)",
+    ],
+  ],
   "requests": [
     {
       "at": "+0:00.000",
@@ -20242,6 +20298,7 @@ exports[`8. cache tiers > repriced listing: unpaid keeps the cached terms, paid 
     "fetch discovery",
     "fetch requirements",
     "fetch facilitatorVerify",
+    "console.warn",
     "selectedAdapter",
     "adapter",
     "fetch facilitatorSettle",
@@ -20931,6 +20988,16 @@ exports[`8. cache tiers > unpaid, then JPYC paid after 4 minutes (cached) and 6 
       "url": "https://open-pay.jp/api/facilitator/settle",
     },
   ],
+  "otherConsole": [
+    [
+      "warn",
+      "[openpay-x402] verify ok without reservation token (jpyc)",
+    ],
+    [
+      "warn",
+      "[openpay-x402] verify ok without reservation token (jpyc)",
+    ],
+  ],
   "requests": [
     {
       "at": "+0:00.000",
@@ -21017,6 +21084,7 @@ exports[`8. cache tiers > unpaid, then JPYC paid after 4 minutes (cached) and 6 
     "fetch requirements",
     "▶ paid at 4:00",
     "fetch facilitatorVerify",
+    "console.warn",
     "selectedAdapter",
     "adapter",
     "fetch facilitatorSettle",
@@ -21024,6 +21092,7 @@ exports[`8. cache tiers > unpaid, then JPYC paid after 4 minutes (cached) and 6 
     "fetch discovery",
     "fetch requirements",
     "fetch facilitatorVerify",
+    "console.warn",
     "selectedAdapter",
     "adapter",
     "fetch facilitatorSettle",
@@ -21834,6 +21903,12 @@ exports[`9. interleaved fetches > discovery: a paid read answering after 4:59.99
       "url": "https://open-pay.jp/api/discovery/resource-id",
     },
   ],
+  "otherConsole": [
+    [
+      "warn",
+      "[openpay-x402] verify ok without reservation token (jpyc)",
+    ],
+  ],
   "requests": [
     {
       "at": "+0:00.000",
@@ -21910,6 +21985,7 @@ exports[`9. interleaved fetches > discovery: a paid read answering after 4:59.99
     "▶ A paid, discovery answers at 4:59.999",
     "fetch discovery",
     "fetch facilitatorVerify",
+    "console.warn",
     "selectedAdapter",
     "adapter",
     "fetch facilitatorSettle",
@@ -21975,6 +22051,12 @@ exports[`9. interleaved fetches > discovery: a paid request overtaken while its 
       "url": "https://open-pay.jp/api/facilitator/settle",
     },
   ],
+  "otherConsole": [
+    [
+      "warn",
+      "[openpay-x402] verify ok without reservation token (jpyc)",
+    ],
+  ],
   "requests": [
     {
       "at": "+0:00.000",
@@ -22030,6 +22112,7 @@ exports[`9. interleaved fetches > discovery: a paid request overtaken while its 
     "▶ B unpaid (repriced terms answer first)",
     "fetch discovery",
     "fetch facilitatorVerify",
+    "console.warn",
     "selectedAdapter",
     "adapter",
     "fetch facilitatorSettle",
@@ -23415,6 +23498,12 @@ exports[`10. consult configuration > MY_RESOURCE_URL with its own query, paid JP
       "url": "https://open-pay.jp/api/facilitator/settle",
     },
   ],
+  "otherConsole": [
+    [
+      "warn",
+      "[openpay-x402] verify ok without reservation token (jpyc)",
+    ],
+  ],
   "requests": [
     {
       "at": "+0:00.000",
@@ -23448,6 +23537,7 @@ exports[`10. consult configuration > MY_RESOURCE_URL with its own query, paid JP
     "▶ request",
     "fetch discovery",
     "fetch facilitatorVerify",
+    "console.warn",
     "selectedAdapter",
     "adapter",
     "fetch facilitatorSettle",
@@ -26209,6 +26299,12 @@ exports[`13. settle pending (202) > JPYC: 202 with JSON null 1`] = `
       "url": "https://open-pay.jp/api/facilitator/settle",
     },
   ],
+  "otherConsole": [
+    [
+      "warn",
+      "[openpay-x402] verify ok without reservation token (jpyc)",
+    ],
+  ],
   "requests": [
     {
       "at": "+0:00.000",
@@ -26238,6 +26334,7 @@ exports[`13. settle pending (202) > JPYC: 202 with JSON null 1`] = `
     "▶ request",
     "fetch discovery",
     "fetch facilitatorVerify",
+    "console.warn",
     "selectedAdapter",
     "adapter",
     "fetch facilitatorSettle",
@@ -26296,6 +26393,12 @@ exports[`13. settle pending (202) > JPYC: 202 with a non-JSON body 1`] = `
       "url": "https://open-pay.jp/api/facilitator/settle",
     },
   ],
+  "otherConsole": [
+    [
+      "warn",
+      "[openpay-x402] verify ok without reservation token (jpyc)",
+    ],
+  ],
   "requests": [
     {
       "at": "+0:00.000",
@@ -26325,6 +26428,7 @@ exports[`13. settle pending (202) > JPYC: 202 with a non-JSON body 1`] = `
     "▶ request",
     "fetch discovery",
     "fetch facilitatorVerify",
+    "console.warn",
     "selectedAdapter",
     "adapter",
     "fetch facilitatorSettle",
@@ -26383,6 +26487,12 @@ exports[`13. settle pending (202) > JPYC: pending body 1`] = `
       "url": "https://open-pay.jp/api/facilitator/settle",
     },
   ],
+  "otherConsole": [
+    [
+      "warn",
+      "[openpay-x402] verify ok without reservation token (jpyc)",
+    ],
+  ],
   "requests": [
     {
       "at": "+0:00.000",
@@ -26416,6 +26526,7 @@ exports[`13. settle pending (202) > JPYC: pending body 1`] = `
     "▶ request",
     "fetch discovery",
     "fetch facilitatorVerify",
+    "console.warn",
     "selectedAdapter",
     "adapter",
     "fetch facilitatorSettle",
@@ -27354,6 +27465,12 @@ exports[`14. reading verify / settle answers > JPYC: settle 200 reverted 1`] = `
       "url": "https://open-pay.jp/api/facilitator/settle",
     },
   ],
+  "otherConsole": [
+    [
+      "warn",
+      "[openpay-x402] verify ok without reservation token (jpyc)",
+    ],
+  ],
   "requests": [
     {
       "at": "+0:00.000",
@@ -27383,6 +27500,7 @@ exports[`14. reading verify / settle answers > JPYC: settle 200 reverted 1`] = `
     "▶ request",
     "fetch discovery",
     "fetch facilitatorVerify",
+    "console.warn",
     "selectedAdapter",
     "adapter",
     "fetch facilitatorSettle",
@@ -27440,6 +27558,12 @@ exports[`14. reading verify / settle answers > JPYC: settle 200 with an empty ob
       "url": "https://open-pay.jp/api/facilitator/settle",
     },
   ],
+  "otherConsole": [
+    [
+      "warn",
+      "[openpay-x402] verify ok without reservation token (jpyc)",
+    ],
+  ],
   "requests": [
     {
       "at": "+0:00.000",
@@ -27469,6 +27593,7 @@ exports[`14. reading verify / settle answers > JPYC: settle 200 with an empty ob
     "▶ request",
     "fetch discovery",
     "fetch facilitatorVerify",
+    "console.warn",
     "selectedAdapter",
     "adapter",
     "fetch facilitatorSettle",
@@ -27527,6 +27652,12 @@ exports[`14. reading verify / settle answers > JPYC: settle 200 with success "tr
       "url": "https://open-pay.jp/api/facilitator/settle",
     },
   ],
+  "otherConsole": [
+    [
+      "warn",
+      "[openpay-x402] verify ok without reservation token (jpyc)",
+    ],
+  ],
   "requests": [
     {
       "at": "+0:00.000",
@@ -27556,6 +27687,7 @@ exports[`14. reading verify / settle answers > JPYC: settle 200 with success "tr
     "▶ request",
     "fetch discovery",
     "fetch facilitatorVerify",
+    "console.warn",
     "selectedAdapter",
     "adapter",
     "fetch facilitatorSettle",
@@ -27614,6 +27746,12 @@ exports[`14. reading verify / settle answers > JPYC: settle 201 1`] = `
       "url": "https://open-pay.jp/api/facilitator/settle",
     },
   ],
+  "otherConsole": [
+    [
+      "warn",
+      "[openpay-x402] verify ok without reservation token (jpyc)",
+    ],
+  ],
   "requests": [
     {
       "at": "+0:00.000",
@@ -27643,6 +27781,7 @@ exports[`14. reading verify / settle answers > JPYC: settle 201 1`] = `
     "▶ request",
     "fetch discovery",
     "fetch facilitatorVerify",
+    "console.warn",
     "selectedAdapter",
     "adapter",
     "fetch facilitatorSettle",
@@ -27697,6 +27836,12 @@ exports[`14. reading verify / settle answers > JPYC: settle 400 with error code 
       "url": "https://open-pay.jp/api/facilitator/settle",
     },
   ],
+  "otherConsole": [
+    [
+      "warn",
+      "[openpay-x402] verify ok without reservation token (jpyc)",
+    ],
+  ],
   "requests": [
     {
       "at": "+0:00.000",
@@ -27726,6 +27871,7 @@ exports[`14. reading verify / settle answers > JPYC: settle 400 with error code 
     "▶ request",
     "fetch discovery",
     "fetch facilitatorVerify",
+    "console.warn",
     "selectedAdapter",
     "adapter",
     "fetch facilitatorSettle",
@@ -27779,6 +27925,12 @@ exports[`14. reading verify / settle answers > JPYC: settle 413 with a non-JSON 
       "url": "https://open-pay.jp/api/facilitator/settle",
     },
   ],
+  "otherConsole": [
+    [
+      "warn",
+      "[openpay-x402] verify ok without reservation token (jpyc)",
+    ],
+  ],
   "requests": [
     {
       "at": "+0:00.000",
@@ -27808,6 +27960,7 @@ exports[`14. reading verify / settle answers > JPYC: settle 413 with a non-JSON 
     "▶ request",
     "fetch discovery",
     "fetch facilitatorVerify",
+    "console.warn",
     "selectedAdapter",
     "adapter",
     "fetch facilitatorSettle",
