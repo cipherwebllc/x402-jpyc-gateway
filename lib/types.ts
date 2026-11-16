@@ -5,18 +5,6 @@ export type PaymentRequirements = {
   [key: string]: unknown;
 };
 
-export type VerifyResult = {
-  isValid?: boolean;
-  invalidReason?: string;
-  [key: string]: unknown;
-};
-
-export type SettleResult = {
-  success?: boolean;
-  errorReason?: string;
-  [key: string]: unknown;
-};
-
 export type UsdcFace = {
   resourceId: string;
   v1Accepts: PaymentRequirements;

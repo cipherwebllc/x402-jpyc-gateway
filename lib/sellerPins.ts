@@ -46,10 +46,17 @@ const BURN_RECIPIENTS = new Set([
   '0xdead000000000000000000000000000000000000',
 ]);
 
+class SellerRequirementsError extends Error {}
+
 export function rejectSellerRequirements(reason: string): never {
   // Only caller-defined reasons: never log remote bodies, wallets, URLs, or payment data.
   console.error(`[openpay-x402] ${reason}`);
-  throw new Error(`OpenPay seller gate: ${reason}`);
+  throw new SellerRequirementsError(`OpenPay seller gate: ${reason}`);
+}
+
+/** True for an error thrown by rejectSellerRequirements, whose reason is already in the log. */
+export function isLoggedSellerRejection(error: unknown): boolean {
+  return error instanceof SellerRequirementsError;
 }
 
 export function sellerConfig(): SellerConfig {

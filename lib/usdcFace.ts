@@ -1,6 +1,6 @@
 // USDC (Base / Arc) の決済条件 (OpenPay relay の requirements) のキャッシュと、買い手に見せる形。
 
-import { OPENPAY_ORIGIN, termsMaxAgeMs } from './openpay';
+import { OPENPAY_ORIGIN, READ_TIMEOUT_MS, termsMaxAgeMs } from './openpay';
 import { decodePaymentSignature } from './paymentHeader';
 import { arcFaceProblem, sameJson, sellerConfig, validateUsdcFace } from './sellerPins';
 import type { SellerConfig, UsdcFace } from './types';
@@ -77,7 +77,7 @@ export async function usdcFace(options: { forPayment?: boolean } = {}): Promise<
   try {
     const res = await fetch(
       OPENPAY_ORIGIN + '/api/x402/relay/requirements?resourceId=' + encodeURIComponent(resourceId),
-      { cache: 'no-store' },
+      { cache: 'no-store', signal: AbortSignal.timeout(READ_TIMEOUT_MS) },
     );
     if (res.status === 404) {
       // USDC 面の無効化 / リレー停止の確定シグナル。止めた USDC 面をキャッシュから出し続けない。

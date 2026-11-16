@@ -1,7 +1,7 @@
 // x402scan 用の OpenAPI 文書。支払いの経路に影響させないため、lib/listing.ts と lib/usdcFace.ts の
 // キャッシュと取得の順序には触らず、検証だけを共有して OpenPay を別に読む。
 import { selectedAdapterSchema } from './adapters/catalog';
-import { OPENPAY_ORIGIN } from './openpay';
+import { OPENPAY_ORIGIN, READ_TIMEOUT_MS } from './openpay';
 import {
   arcFaceProblem,
   sellerConfig,
@@ -13,7 +13,6 @@ import type { CatalogItem, SellerConfig } from './types';
 // OpenPay の取得上限は IP ごとで /api/consult と共有する。失敗も含めて読む回数を抑える。
 const LISTING_TTL_MS = 30 * 60_000;
 const RETRY_AFTER_MS = 60_000;
-const READ_TIMEOUT_MS = 5_000;
 // OpenPay が保存する usdc.priceUsd の形 (USD の 10 進文字列)。
 const USD_PRICE = /^(?:0|[1-9][0-9]*)(?:\.[0-9]{1,6})?$/;
 

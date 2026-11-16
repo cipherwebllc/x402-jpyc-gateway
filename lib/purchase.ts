@@ -1,14 +1,22 @@
-// GET /api/consult の本体 (consult)。決済条件を読み、どの rail で払うかを決め (choosePayment)、
+// GET / HEAD /api/consult の本体。決済条件を読み、どの rail で払うかを決め (choosePayment)、
 // verify → 上流 → settle を 1 本の手順で動かす。上流が失敗したら settle しない。
+// OpenPay の応答は openpay.ts の verifyOutcome / settleOutcome で読み分ける。
 
 import { selectedAdapter } from './adapters';
 import { json402, jsonResponse } from './http';
 import { acceptsFor } from './listing';
-import { encodePaymentResponse, settlePayment, verifyPayment } from './openpay';
+import {
+  encodePaymentResponse,
+  settleOutcome,
+  settlePayment,
+  verifyOutcome,
+  verifyPayment,
+  type OpenPayReply,
+} from './openpay';
 import { decodePaymentHeader } from './paymentHeader';
 import { relayPayment } from './relay';
-import { ARC_NETWORKS } from './sellerPins';
-import type { PaymentRequirements, SettleResult, UsdcFace, UsdcRail, VerifyResult } from './types';
+import { ARC_NETWORKS, isLoggedSellerRejection } from './sellerPins';
+import type { PaymentRequirements, UsdcFace, UsdcRail } from './types';
 import { isArcPayment, paymentRequiredHeaderFor, usdcFace } from './usdcFace';
 
 // USDC 面がないとき、Base の支払いを名乗る X-PAYMENT は JPYC の facilitator に回さない。
@@ -72,60 +80,79 @@ export function choosePayment(
   return { kind: 'jpyc', payload };
 }
 
-// 1 つの rail の verify / settle。Response が返ったらそのまま返す (USDC の 409 → 402 requirements_mismatch)。
-// verify / settle は呼び先の Promise をそのまま返し、await を足さない。足すと、同時に動く別の支払いとの
-// 上流の呼び出しや settle の順番が以前と変わる。本文の読み替えは await の直後に同期の read で行う。
+// 1 つの rail の verify / settle。OpenPay の応答をそのまま返す (読み分けは consult がする)。
+// Response が返ったらそのまま返す (USDC の 409 → 402 requirements_mismatch)。
+// throw するのは、pin や設定が合わず OpenPay に何も送らなかったときと、USDC の relay が 409 で断ったあとに
+// 決済条件を取り直せなかった (取れない・pin が合わない) とき。どちらも請求はない。
 type PurchaseRail = {
-  verify(): Promise<VerifyResult | Response>;
-  settle(): Promise<SettleResult | Response>;
-  read<T>(body: T): T;
-  // isValid が true でなく理由もないときの error。いまは rail ごとに文字列が違う (C1 で揃える)。
+  name: 'jpyc' | UsdcRail;
+  verify(): Promise<OpenPayReply | Response>;
+  settle(): Promise<OpenPayReply | Response>;
+  // 支払いが通らず、OpenPay が理由を返さなかったときの error。OpenPay の 2 つのリファレンスゲートに
+  // 合わせて、rail ごとに文字列が違う。
   invalidFallback: 'invalid_payment' | 'payment_invalid';
-  successHeaders(paymentResponse: string): Record<string, string>;
+  // 決済の結果 (settle の本文) を買い手に渡すヘッダー。
+  receiptHeaders(receipt: Record<string, unknown>): Record<string, string>;
 };
 
 function jpycRail(payload: unknown, accept: PaymentRequirements): PurchaseRail {
   return {
+    name: 'jpyc',
     verify: () => verifyPayment(payload, accept),
     settle: () => settlePayment(payload, accept),
-    // facilitator の JSON は加工しない。null だと consult の isValid / success の読み取りが
-    // try の外で TypeError になり、GET から漏れる (Next の 500)。いまの挙動のまま残す (C1 で直す)。
-    read: (body) => body,
     invalidFallback: 'invalid_payment',
-    successHeaders: (paymentResponse) => ({ 'X-PAYMENT-RESPONSE': paymentResponse }),
+    receiptHeaders: (receipt) => ({ 'X-PAYMENT-RESPONSE': encodePaymentResponse(receipt) }),
   };
 }
 
 function usdcRail({ face, headers, rail }: UsdcPurchase, jpycAccepts: PaymentRequirements[]): PurchaseRail {
+  // PAYMENT-SIGNATURE で払うのは x402 v2 のクライアントで、結果は PAYMENT-RESPONSE から読む。
+  const isV2 = 'paymentSignatureHeader' in headers;
   return {
+    name: rail,
     verify: () => relayPayment('verify', headers, face, jpycAccepts, rail),
     settle: () => relayPayment('settle', headers, face, jpycAccepts, rail),
-    // relay の JSON null は {} にする。以前の `?.` と同じく 402 (payment_invalid / settlement_failed) になる。
-    read: (body) => body ?? ({} as typeof body),
     invalidFallback: 'payment_invalid',
-    successHeaders: (paymentResponse) => ({
-      'X-PAYMENT-RESPONSE': paymentResponse,
-      // Arc buyers pay with x402 v2 clients, which read PAYMENT-RESPONSE.
-      ...(rail === 'arc' ? { 'PAYMENT-RESPONSE': paymentResponse } : {}),
-    }),
+    receiptHeaders: (receipt) => {
+      const paymentResponse = encodePaymentResponse(receipt);
+      return {
+        'X-PAYMENT-RESPONSE': paymentResponse,
+        ...(isV2 ? { 'PAYMENT-RESPONSE': paymentResponse } : {}),
+      };
+    },
   };
 }
 
-// リクエスト全体を、この 1 つの async 関数の中で終える。途中で別の async 関数の Promise を return しない
-// (Promise を引き継ぐ分だけ完了が遅れ、同時に動く別のリクエストとの完了の順番が以前と変わる)。
+// 握りつぶさずに残す失敗の記録。書くのは、ここで決めた固定の言葉と rail の名前、HTTP の状態だけ。
+// q・回答・支払いのヘッダー・ウォレット・URL・相手の本文・例外のメッセージは書かない。
+function logFailure(what: string, rail: PurchaseRail, reply?: OpenPayReply): void {
+  const status = reply === undefined ? '' : reply.status === null ? ', no response' : `, HTTP ${reply.status}`;
+  console.error(`[openpay-x402] ${what} (${rail.name}${status})`);
+}
+
+// catch した例外の記録。出品や pin の不一致は sellerPins が理由を記録済みなので、それ以外のときだけ書く。
+function logUnexpected(error: unknown, what: string): void {
+  if (!isLoggedSellerRejection(error)) console.error(`[openpay-x402] ${what} (unexpected error)`);
+}
+
+function hasPaymentHeaders(paymentHeader: string | null, paymentSignatureHeader: string | null): boolean {
+  return Boolean(paymentHeader) || paymentSignatureHeader !== null;
+}
+
 // 失敗の 402 は rail によらず、支払える全 rail の決済条件で返す。
 export async function consult(request: Request): Promise<Response> {
   const paymentHeader = request.headers.get('X-PAYMENT');
   const paymentSignatureHeader = request.headers.get('PAYMENT-SIGNATURE');
   // 402 ゲートと掲載値の鮮度 (5 分 / 30 分) は必ずこの 1 変数から決める。
-  const hasPayment = Boolean(paymentHeader) || paymentSignatureHeader !== null;
+  const hasPayment = hasPaymentHeaders(paymentHeader, paymentSignatureHeader);
 
   let accepts: PaymentRequirements[];
   let usdc: UsdcFace | null;
   try {
     accepts = await acceptsFor(request.url, { forPayment: hasPayment });
     usdc = await usdcFace({ forPayment: hasPayment });
-  } catch {
+  } catch (error) {
+    logUnexpected(error, 'payment terms unavailable');
     return jsonResponse(500, { error: 'accepts_unavailable' });
   }
 
@@ -142,15 +169,24 @@ export async function consult(request: Request): Promise<Response> {
   if (choice.kind === 'reply') return choice.response;
   const rail = choice.kind === 'jpyc' ? jpycRail(choice.payload, accepts[0]) : usdcRail(choice, accepts);
 
-  let verification: VerifyResult | Response;
+  let verifyReply: OpenPayReply | Response;
   try {
-    verification = rail.read(await rail.verify());
-  } catch {
+    verifyReply = await rail.verify();
+  } catch (error) {
+    // pin や設定が合わず OpenPay に何も送っていないか、relay が 409 で断ったあとに決済条件を取り直せなかった。
+    // どちらも請求していない。
+    logUnexpected(error, 'verify not sent or refused by OpenPay');
     return jsonResponse(500, { error: 'payment_verification_failed' });
   }
-  if (verification instanceof Response) return verification;
-  if (verification.isValid !== true) {
-    return paymentRequired(accepts, usdc, verification.invalidReason ?? rail.invalidFallback);
+  if (verifyReply instanceof Response) return verifyReply;
+  const verification = verifyOutcome(verifyReply);
+  if (verification.kind === 'unavailable') {
+    // 何も動かしていないし、請求もしていない。払い直しではなく、時間をおいた再試行を促す。
+    logFailure('verify unavailable', rail, verifyReply);
+    return jsonResponse(503, { error: 'payment_service_unavailable' });
+  }
+  if (verification.kind === 'rejected') {
+    return paymentRequired(accepts, usdc, verification.reason ?? rail.invalidFallback);
   }
 
   let serializedBody: string;
@@ -160,26 +196,54 @@ export async function consult(request: Request): Promise<Response> {
     if (serialized === undefined) throw new Error('adapter result is not JSON serializable');
     serializedBody = serialized;
   } catch {
+    logFailure('upstream failed, not charged', rail);
     return jsonResponse(502, { error: 'upstream_error' });
   }
 
-  let settlement: SettleResult | Response;
+  let settleReply: OpenPayReply | Response;
   try {
-    settlement = rail.read(await rail.settle());
-  } catch {
+    settleReply = await rail.settle();
+  } catch (error) {
+    // pin や設定が合わず OpenPay に何も送っていないか、relay が 409 で断ったあとに決済条件を取り直せなかった。
+    // どちらも請求していない。
+    logUnexpected(error, 'settle not sent or refused by OpenPay');
     return jsonResponse(500, { error: 'payment_settlement_failed' });
   }
-  if (settlement instanceof Response) return settlement;
-  if (settlement.success !== true) {
-    return paymentRequired(accepts, usdc, settlement.errorReason ?? 'settlement_failed');
+  if (settleReply instanceof Response) return settleReply;
+  const settlement = settleOutcome(settleReply);
+  switch (settlement.kind) {
+    case 'settled':
+      return new Response(serializedBody, {
+        status: 200,
+        headers: {
+          'content-type': 'application/json',
+          'cache-control': 'no-store',
+          ...rail.receiptHeaders(settlement.receipt),
+        },
+      });
+    case 'rejected':
+      return paymentRequired(accepts, usdc, settlement.reason ?? 'settlement_failed');
+    case 'pending':
+      // 決済される見込みなので 402 にしない (402 は「もう一度払って」の意味になり、二重払いを招く)。
+      logFailure('settle pending, content not delivered', rail, settleReply);
+      return jsonResponse(
+        502,
+        { error: 'settlement_pending' },
+        settlement.receipt ? rail.receiptHeaders(settlement.receipt) : {},
+      );
+    case 'unknown':
+      // 決済されたかどうかが分からない。「失敗」とは言わず、払い直しも求めない。
+      logFailure('settle outcome unknown, content not delivered', rail, settleReply);
+      return jsonResponse(500, { error: 'settlement_unknown' });
   }
+}
 
-  return new Response(serializedBody, {
-    status: 200,
-    headers: {
-      'content-type': 'application/json',
-      'cache-control': 'no-store',
-      ...rail.successHeaders(encodePaymentResponse(settlement)),
-    },
-  });
+// HEAD は本文を返せないので、何も売らない。支払いのヘッダーがなければ GET と同じ 402 (ヘッダーだけ) を返し、
+// 支払いのヘッダーがあれば OpenPay を呼ばずに 405 で断る (verify・上流・settle を動かさない)。
+export async function consultHead(request: Request): Promise<Response> {
+  if (hasPaymentHeaders(request.headers.get('X-PAYMENT'), request.headers.get('PAYMENT-SIGNATURE'))) {
+    return new Response(null, { status: 405, headers: { allow: 'GET', 'cache-control': 'no-store' } });
+  }
+  const response = await consult(request);
+  return new Response(null, { status: response.status, headers: response.headers });
 }

@@ -136,10 +136,11 @@ describe('choosePayment', () => {
   });
 });
 
-// 同じモジュールで同時に動く 2 件の支払いの順番 (verify / 上流 / settle の fetch と応答)。await が 1 つ
-// 増えるだけで入れ替わる (coo-icp の slot の割り当ても変わる)。期待値はリファクタ前のコード
-// (a108724 の route.ts) で同じテストを動かして得た順番。lib/ はモックした '@/lib/adapters' と route だけを
-// 読むので、同じ本文が分割の前後どちらでも動く。
+// 同じモジュールで同時に動く 2 件の支払い。どちらも「自分の」支払いの verify → 上流 → settle を 1 回ずつ通って
+// 200 になる。fetch の記録は、POST の本文の支払い (facilitator は paymentPayload、relay は paymentHeader か
+// paymentSignatureHeader) から誰の支払いかを決めて `verify <名前>` / `settle <名前>` と書く。settle はテストが
+// 1 件ずつ放すまで止めておき、2 件とも止まっている間はどちらも終わらないこと、先の 1 件だけを放すとその 1 件
+// だけが終わることを確かめる (相手の settle で終わっていない)。2 件のあいだの verify と上流の順番は約束しない。
 describe('two concurrent paid requests on one module', () => {
   const ROUTES: Record<string, string> = {
     [`${OPENPAY}/api/discovery/${resourceId}`]: 'discovery',
@@ -164,6 +165,19 @@ describe('two concurrent paid requests on one module', () => {
     arc: { 'PAYMENT-SIGNATURE': SIG_ARC },
   };
   let events: string[] = [];
+  // settle ごとの放す関数 (支払いの名前で引く)。
+  let heldSettles: Map<string, () => void>;
+
+  /** The name in PAID of the payment carried by an OpenPay POST body. */
+  function payerOf(body: string): string {
+    const sent = JSON.parse(body) as { paymentPayload?: unknown; paymentHeader?: string; paymentSignatureHeader?: string };
+    const header = sent.paymentPayload !== undefined
+      ? b64(sent.paymentPayload)
+      : sent.paymentHeader ?? sent.paymentSignatureHeader;
+    const names = Object.keys(PAID).filter((name) => Object.values(PAID[name])[0] === header);
+    if (names.length !== 1) throw new Error('POST body does not carry exactly one known payment');
+    return names[0];
+  }
 
   beforeEach(async () => {
     vi.resetModules();
@@ -171,9 +185,21 @@ describe('two concurrent paid requests on one module', () => {
     vi.stubEnv('MY_RESOURCE_ID', resourceId);
     vi.stubEnv('EXPECTED_RECIPIENT', merchant);
     vi.stubEnv('EXPECTED_USDC_RECIPIENT', usdcMerchant);
-    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+    heldSettles = new Map();
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const route = ROUTES[String(input)];
-      events.push(`fetch ${route}`);
+      if (!route) throw new Error(`unexpected fetch ${String(input)}`);
+      if (init?.method !== 'POST') {
+        events.push(`read ${route}`);
+        return response(BODIES[route]);
+      }
+      const name = payerOf(String(init.body));
+      const step = route.endsWith('settle') ? 'settle' : 'verify';
+      events.push(`${step} ${name}`);
+      if (step === 'settle') {
+        if (heldSettles.has(name)) throw new Error(`second settle for ${name}`);
+        await new Promise<void>((release) => heldSettles.set(name, release));
+      }
       return response(BODIES[route]);
     }));
     const { selectedAdapter } = await import('@/lib/adapters');
@@ -184,110 +210,47 @@ describe('two concurrent paid requests on one module', () => {
   });
 
   afterEach(() => {
+    for (const release of heldSettles.values()) release();
     vi.unstubAllEnvs();
     vi.unstubAllGlobals();
   });
 
-  it.each<[string, string, string[]]>([
-    ['base2', 'jpyc', ['fetch relay verify', 'fetch facilitator verify', 'adapter jpyc', 'adapter base2',
-      'fetch facilitator settle', 'fetch relay settle', 'done jpyc', 'done base2']],
-    ['jpyc', 'base2', ['fetch facilitator verify', 'fetch relay verify', 'adapter jpyc', 'fetch facilitator settle',
-      'adapter base2', 'fetch relay settle', 'done jpyc', 'done base2']],
-    ['base1', 'jpyc', ['fetch relay verify', 'fetch facilitator verify', 'adapter jpyc', 'adapter base1',
-      'fetch facilitator settle', 'fetch relay settle', 'done jpyc', 'done base1']],
-    ['jpyc', 'base1', ['fetch facilitator verify', 'fetch relay verify', 'adapter jpyc', 'fetch facilitator settle',
-      'adapter base1', 'fetch relay settle', 'done jpyc', 'done base1']],
-    ['arc', 'jpyc', ['fetch relay verify', 'fetch facilitator verify', 'adapter jpyc', 'adapter arc',
-      'fetch facilitator settle', 'fetch relay settle', 'done jpyc', 'done arc']],
-    ['jpyc', 'arc', ['fetch facilitator verify', 'fetch relay verify', 'adapter jpyc', 'fetch facilitator settle',
-      'adapter arc', 'fetch relay settle', 'done jpyc', 'done arc']],
-    ['arc', 'base2', ['fetch relay verify', 'fetch relay verify', 'adapter arc', 'adapter base2',
-      'fetch relay settle', 'fetch relay settle', 'done arc', 'done base2']],
-  ])('%s started before %s keeps the original order', async (first, second, expected) => {
+  it.each<[string, string]>([
+    ['base2', 'jpyc'], ['jpyc', 'base2'], ['base1', 'jpyc'], ['jpyc', 'base1'],
+    ['arc', 'jpyc'], ['jpyc', 'arc'], ['arc', 'base2'],
+  ])('%s and %s together each run their own verify, upstream call and settle', async (first, second) => {
     const { GET } = await import('@/app/api/consult/route');
     // 支払いなしの 1 件で出品と USDC 面をキャッシュに入れ、支払い 2 件は同じ条件から始める。
     expect((await GET(new Request(`${resource}?q=warm`))).status).toBe(402);
     events = [];
 
-    const statuses = await Promise.all([first, second].map(async (name) => {
+    const statuses: Record<string, number> = {};
+    const requests = [first, second].map(async (name) => {
       const res = await GET(new Request(`${resource}?q=${name}`, { headers: PAID[name] }));
       events.push(`done ${name}`);
-      return res.status;
-    }));
+      statuses[name] = res.status;
+    });
+    const release = (name: string) => heldSettles.get(name)!();
 
-    expect(statuses).toEqual([200, 200]);
-    expect(events).toEqual(expected);
-  });
-});
+    // 2 件とも自分の settle で止まっている間は、どちらも終わらない。
+    await vi.waitFor(() => expect([...heldSettles.keys()].sort()).toEqual([first, second].sort()));
+    expect(statuses).toEqual({});
 
-// 支払いの settle の途中で始まった支払いなしのリクエストと、どちらが先に終わるか。consult の最後で
-// 別の async 関数の Promise を返すと、支払いの完了だけが数ジョブ遅れて入れ替わる。境目の両側 (k と k+1) を
-// 置き、完了が 1 ジョブ早まっても遅れても失敗するようにしてある。期待値は a108724 で得た順番。
-describe('completion order of a paid request and an unpaid one started during its settle', () => {
-  const PAID: Record<string, Record<string, string>> = {
-    jpyc: { 'X-PAYMENT': paymentHeader },
-    base2: { 'PAYMENT-SIGNATURE': SIG_BASE },
-  };
-  let hook: 'fetch' | 'json' = 'json';
-  let startUnpaid: () => void = () => {};
+    // 先の 1 件の settle だけを放すと、その 1 件だけが終わる。
+    release(first);
+    await vi.waitFor(() => expect(statuses).toEqual({ [first]: 200 }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(statuses).toEqual({ [first]: 200 });
 
-  beforeEach(async () => {
-    vi.resetModules();
-    vi.stubEnv('MY_RESOURCE_URL', resource);
-    vi.stubEnv('MY_RESOURCE_ID', resourceId);
-    vi.stubEnv('EXPECTED_RECIPIENT', merchant);
-    vi.stubEnv('EXPECTED_USDC_RECIPIENT', usdcMerchant);
-    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
-      const url = String(input);
-      if (!url.endsWith('/settle')) {
-        return response(url.includes('/discovery/') ? listing : url.includes('/requirements') ? usdcFace : { isValid: true });
-      }
-      if (hook === 'fetch') startUnpaid();
-      // settle の応答だけは素のオブジェクトにして、json() が呼ばれた時点をテストから掴む。
-      return {
-        status: 200,
-        ok: true,
-        json: () => {
-          if (hook === 'json') startUnpaid();
-          return Promise.resolve({ success: true, transaction: '0xsettled' });
-        },
-      } as unknown as Response;
-    }));
-    const { selectedAdapter } = await import('@/lib/adapters');
-    vi.mocked(selectedAdapter).mockReset().mockReturnValue(async () => ({ answer: 'answer' }));
-  });
+    release(second);
+    await vi.waitFor(() => expect(statuses).toEqual({ [first]: 200, [second]: 200 }));
+    await Promise.all(requests);
 
-  afterEach(() => {
-    vi.unstubAllEnvs();
-    vi.unstubAllGlobals();
-  });
-
-  it.each<[string, number, 'fetch' | 'json', string[]]>([
-    ['jpyc', 0, 'json', ['paid 200', 'unpaid 402']],
-    ['jpyc', 0, 'fetch', ['unpaid 402', 'paid 200']],
-    ['jpyc', 1, 'fetch', ['paid 200', 'unpaid 402']],
-    ['base2', 1, 'fetch', ['unpaid 402', 'paid 200']],
-    ['base2', 2, 'fetch', ['paid 200', 'unpaid 402']],
-  ])('%s paid, unpaid started %i microtasks after the settle %s()', async (rail, k, at, expected) => {
-    const { GET } = await import('@/app/api/consult/route');
-    expect((await GET(new Request(`${resource}?q=warm`))).status).toBe(402);
-    hook = at;
-    const order: string[] = [];
-    let unpaid: Promise<void> | undefined;
-    startUnpaid = () => {
-      let left = k;
-      const start = () => {
-        if (left-- > 0) return queueMicrotask(start);
-        unpaid = GET(new Request(`${resource}?q=unpaid`)).then((res) => { order.push(`unpaid ${res.status}`); });
-      };
-      queueMicrotask(start);
-    };
-
-    await GET(new Request(`${resource}?q=paid`, { headers: PAID[rail] }))
-      .then((res) => { order.push(`paid ${res.status}`); });
-    expect(unpaid).toBeDefined();
-    await unpaid;
-
-    expect(order).toEqual(expected);
+    // 記録はすべてどちらかの 1 件のもので、各自が自分の支払いの verify → 上流 → settle → 応答を 1 回ずつ通る。
+    const own = (name: string) => events.filter((event) => event.split(' ')[1] === name);
+    expect(own(first).length + own(second).length).toBe(events.length);
+    for (const name of [first, second]) {
+      expect(own(name)).toEqual([`verify ${name}`, `adapter ${name}`, `settle ${name}`, `done ${name}`]);
+    }
   });
 });

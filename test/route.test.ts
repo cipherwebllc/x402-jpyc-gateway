@@ -484,11 +484,13 @@ describe('GET /api/consult', () => {
   });
 
   it.each([
-    ['verify', { relayVerifyThrows: true }, 'payment_verification_failed'],
-    ['settle', { relaySettleThrows: true }, 'payment_settlement_failed'],
+    // verify に応答がなければ、何も動かさずに 503 (請求していない)。
+    ['verify', { relayVerifyThrows: true }, 503, 'payment_service_unavailable', 0],
+    // settle に応答がなければ、決済されたかどうかが分からない。「失敗」とも「払い直して」とも言わない。
+    ['settle', { relaySettleThrows: true }, 500, 'settlement_unknown', 1],
   ] as const)(
-    'maps a USDC relay %s exception to the existing 500 wrapper',
-    async (_endpoint, state, error) => {
+    'answers a USDC relay %s with no response without a 402',
+    async (_endpoint, state, status, error, adapterCalls) => {
       fetchMock = fetchFor({ usdc: true, ...state });
       vi.stubGlobal('fetch', fetchMock);
 
@@ -496,9 +498,11 @@ describe('GET /api/consult', () => {
         new Request(url(), { headers: { 'PAYMENT-SIGNATURE': 'raw-signature' } }),
       );
 
-      expect(res.status).toBe(500);
+      expect(res.status).toBe(status);
       expectNoStore(res);
+      expect(res.headers.get('PAYMENT-REQUIRED')).toBeNull();
       expect(await res.json()).toEqual({ error });
+      expect(adapter).toHaveBeenCalledTimes(adapterCalls);
     },
   );
 
@@ -541,7 +545,10 @@ describe('GET /api/consult', () => {
 
     expect(res.status).toBe(402);
     expect(await res.json()).toMatchObject({ accepts: [{ extra: { openpay: { merchant } } }] });
-    expect(fetchMock).toHaveBeenCalledWith(`${OPENPAY}/api/discovery/${resourceId}`, { cache: 'no-store' });
+    expect(fetchMock).toHaveBeenCalledWith(
+      `${OPENPAY}/api/discovery/${resourceId}`,
+      { cache: 'no-store', signal: expect.any(AbortSignal) },
+    );
     expect(fetchMock.mock.calls.some(([input]) => String(input) === `${OPENPAY}/api/discovery`)).toBe(false);
   });
 
@@ -1011,12 +1018,13 @@ describe('GET /api/consult', () => {
       expect(relayBody('verify').paymentRequirements).toEqual(arcV2Accept);
     });
 
-    it('keeps Base payments on the Base pin without PAYMENT-RESPONSE while Arc is served', async () => {
+    it('keeps Base payments on the Base pin while Arc is served, with PAYMENT-RESPONSE for the v2 buyer', async () => {
       useFace(usdcFaceWithArc());
       const res = await GET(new Request(url(), { headers: { 'PAYMENT-SIGNATURE': paymentSignatureFor(v2Accept) } }));
       expect(res.status).toBe(200);
       expect(relayBody('verify').paymentRequirements).toEqual(usdcAccept);
-      expect(res.headers.get('PAYMENT-RESPONSE')).toBeNull();
+      expect(res.headers.get('PAYMENT-RESPONSE')).not.toBeNull();
+      expect(res.headers.get('PAYMENT-RESPONSE')).toBe(res.headers.get('X-PAYMENT-RESPONSE'));
     });
 
     it('recovers when OpenPay enables Arc after the gateway cached a Base-only face', async () => {
